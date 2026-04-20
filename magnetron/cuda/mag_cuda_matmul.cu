@@ -345,6 +345,27 @@ namespace mag {
         }
         __syncthreads();
 
+        auto init_tma_coords = [=](int ktile, int32_t (&ca)[3], int32_t (&cb)[3]) -> void {
+            if constexpr (!TA) { // dims {K, M, batch}, box {BK, BM, 1}
+                ca[0] = ktile * BK;
+                ca[1] = tile_m;
+                ca[2] = batch;
+            } else { // dims {M, K, batch}, box {BM, BK, 1}
+                ca[0] = tile_m;
+                ca[1] = ktile * BK;
+                ca[2] = batch;
+            }
+            if constexpr (!TB) { // dims {N, K, batch}, box {BN, BK, 1}
+                cb[0] = tile_n;
+                cb[1] = ktile * BK;
+                cb[2] = batch;
+            } else { // dims {K, N, batch}, box {BK, BN, 1}
+                cb[0] = ktile * BK;
+                cb[1] = tile_n;
+                cb[2] = batch;
+            }
+        };
+
         auto issue_tma_stage = [&](int stage, int ktile) -> void {
             if (!is_producer || lane != 0) return;
 
@@ -352,24 +373,7 @@ namespace mag {
             auto *b_buf = b_smem + stage * B_SIZE;
             int32_t a_coords[3];
             int32_t b_coords[3];
-            if constexpr (!TA) { // dims {K, M, batch}, box {BK, BM, 1}
-                a_coords[0] = ktile * BK;
-                a_coords[1] = tile_m;
-                a_coords[2] = batch;
-            } else { // dims {M, K, batch}, box {BM, BK, 1}
-                a_coords[0] = tile_m;
-                a_coords[1] = ktile * BK;
-                a_coords[2] = batch;
-            }
-            if constexpr (!TB) { // dims {N, K, batch}, box {BN, BK, 1}
-                b_coords[0] = tile_n;
-                b_coords[1] = ktile * BK;
-                b_coords[2] = batch;
-            } else { // dims {K, N, batch}, box {BK, BN, 1}
-                b_coords[0] = ktile * BK;
-                b_coords[1] = tile_n;
-                b_coords[2] = batch;
-            }
+            init_tma_coords(ktile, a_coords, b_coords);
 
             a_bar[stage].cp_async_bulk_tensor_3d(a_buf, &map_a, a_coords);
             a_bar[stage].arrive_expect_tx(sizeof(T)*A_SIZE);
