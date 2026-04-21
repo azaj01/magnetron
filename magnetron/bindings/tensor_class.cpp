@@ -219,7 +219,12 @@ namespace mag::bindings {
                 default: throw nb::value_error("Unsupported dtype for tolist()");
             }
             return result;
-        }, "Convert tensor to a nested Python list (copies through host if needed).");
+        }, "Convert tensor to a nested Python list (copies through host if needed).")
+        .def("save_image", [](const tensor_wrapper &self, const std::string &file_name) -> void {
+            std::lock_guard lock {get_global_mutex()};
+            mag_error_t err {};
+            throw_if_error(mag_save_image(&err, *self, file_name.c_str()), err);
+        });
     }
 
     extern void init_tensor_special_methods(nb::class_<tensor_wrapper> &cls);

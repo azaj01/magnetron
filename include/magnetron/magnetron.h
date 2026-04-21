@@ -244,6 +244,7 @@ extern MAG_EXPORT mag_status_t mag_arange(mag_error_t *err, mag_tensor_t **out_r
 extern MAG_EXPORT mag_status_t mag_one_hot(mag_error_t *err, mag_tensor_t **out_result, mag_tensor_t *indices, int64_t num_classes);
 extern MAG_EXPORT mag_status_t mag_rand_perm(mag_error_t *err, mag_tensor_t **out_result, mag_context_t *ctx, mag_dtype_t type, int64_t n, mag_device_id_t device);
 extern MAG_EXPORT mag_status_t mag_load_image(mag_error_t *err, mag_tensor_t **out_result, mag_context_t *ctx, const char *file, const char *channels, uint32_t resize_width, uint32_t resize_height, mag_device_id_t device);
+extern MAG_EXPORT mag_status_t mag_save_image(mag_error_t *err, mag_tensor_t *tensor, const char *file);
 extern MAG_EXPORT mag_status_t mag_copy_raw_(mag_error_t *err, mag_tensor_t *tensor, const void *data, size_t size_bytes);
 extern MAG_EXPORT mag_status_t mag_zero_(mag_error_t *err, mag_tensor_t *tensor);
 extern MAG_EXPORT mag_status_t mag_fill_(mag_error_t *err, mag_tensor_t *tensor, mag_scalar_t value);
