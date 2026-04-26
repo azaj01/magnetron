@@ -23,12 +23,12 @@ extern "C" {
 
 /* CPU Compute kernel payload passed to each CPU thread. */
 typedef struct mag_kernel_payload_t {
-    const mag_command_t *cmd;
-    int64_t thread_num;
-    int64_t thread_idx;
-    mag_philox4x32_stream_t *prng;
-    volatile mag_atomic64_t *mm_next_tile;
-    mag_matmul_block_params_t mm_params;
+  const mag_command_t *cmd;
+  int64_t thread_num;
+  int64_t thread_idx;
+  mag_philox4x32_stream_t *prng;
+  volatile mag_atomic64_t *mm_next_tile;
+  mag_matmul_block_params_t mm_params;
 } mag_kernel_payload_t;
 
 /*
@@ -38,11 +38,11 @@ typedef struct mag_kernel_payload_t {
 ** See magnetron_cpu.c for details.
 */
 typedef struct mag_kernel_registry_t {
-    void (*init)(void);
-    void (*deinit)(void);
-    void (*operators[MAG_OP__NUM][MAG_DTYPE__NUM])(const mag_kernel_payload_t *);
-    size_t (*vreg_width)(void);
-    uint32_t (*crc32c)(const void *buf, size_t nb);
+  void (*init)(void);
+  void (*deinit)(void);
+  void (*operators[MAG_OP__NUM][MAG_DTYPE__NUM])(const mag_kernel_payload_t *);
+  size_t (*vreg_width)(void);
+  uint32_t (*crc32c)(const void *buf, size_t nb);
 } mag_kernel_registry_t;
 
 #ifdef __cplusplus

@@ -32,23 +32,23 @@ void mag_set_log_level(mag_log_level_t level) { mag_log_level_var = level; }
 mag_log_level_t mag_log_level(void) { return mag_log_level_var; }
 
 const char *mag_status_get_name(mag_status_t op){
-    static const char *names[] = {
-        #define _(name, str) [name] = str,
-        mag_statusdef(_)
-        #undef _
-    };
-    mag_static_assert(sizeof(names)/sizeof(*names)-1 == MAG_STATUS_ERR_UNKNOWN);
-    return names[op];
+  static const char *names[] = {
+    #define _(name, str) [name] = str,
+    mag_statusdef(_)
+    #undef _
+  };
+  mag_static_assert(sizeof(names)/sizeof(*names)-1 == MAG_STATUS_ERR_UNKNOWN);
+  return names[op];
 }
 
 const char *mag_status_get_message(mag_status_t op) {
-    static const char *messages[] = {
-        #define _(name, str) [name] = str,
-        mag_statusdef(_)
-        #undef _
-    };
-    mag_static_assert(sizeof(messages)/sizeof(*messages)-1 == MAG_STATUS_ERR_UNKNOWN);
-    return messages[op];
+  static const char *messages[] = {
+    #define _(name, str) [name] = str,
+    mag_statusdef(_)
+    #undef _
+  };
+  mag_static_assert(sizeof(messages)/sizeof(*messages)-1 == MAG_STATUS_ERR_UNKNOWN);
+  return messages[op];
 }
 
 #if defined(__linux__) && defined(__GLIBC__)
@@ -59,15 +59,15 @@ static void mag_dump_backtrace(void) { /* Try to print backtrace using gdb or ll
   snprintf(proc, sizeof(proc), "attach %d", getpid());
   int pid = fork();
   if (pid == 0) {
-    execlp("gdb", "gdb", "--batch", "-ex", "set style enabled on", "-ex", proc, "-ex", "bt -frame-info source-and-location", "-ex", "detach", "-ex", "quit", NULL);
-    execlp("lldb", "lldb", "--batch", "-o", "bt", "-o", "quit", "-p", proc, NULL);
-    exit(EXIT_FAILURE);
+  execlp("gdb", "gdb", "--batch", "-ex", "set style enabled on", "-ex", proc, "-ex", "bt -frame-info source-and-location", "-ex", "detach", "-ex", "quit", NULL);
+  execlp("lldb", "lldb", "--batch", "-o", "bt", "-o", "quit", "-p", proc, NULL);
+  exit(EXIT_FAILURE);
   }
   int stat;
   waitpid(pid, &stat, 0);
   if (WIFEXITED(stat) && WEXITSTATUS(stat) == EXIT_FAILURE) {
-    void *trace[0xff];
-    backtrace_symbols_fd(trace, backtrace(trace, sizeof(trace)/sizeof(*trace)), STDERR_FILENO);
+  void *trace[0xff];
+  backtrace_symbols_fd(trace, backtrace(trace, sizeof(trace)/sizeof(*trace)), STDERR_FILENO);
   }
 }
 #else
@@ -88,8 +88,8 @@ MAG_NORET MAG_COLDPROC void mag_panic(const char *fmt, ...) { /* Panic and exit 
 #if 0
   FILE *f = fopen("magnetron_panic.log", "w");
   if (f) {
-    mag_panic_dump(f, false, fmt, args);
-    fclose(f), f = NULL;
+  mag_panic_dump(f, false, fmt, args);
+  fclose(f), f = NULL;
   }
 #endif
   fflush(stdout);
@@ -102,23 +102,23 @@ MAG_NORET MAG_COLDPROC void mag_panic(const char *fmt, ...) { /* Panic and exit 
 }
 
 void mag_log_fmt(mag_log_level_t level, const char *fmt, ...) {
-    if (level > mag_log_level_var) return;
-    FILE *f = stdout;
-    const char *color = NULL;
-    switch (level) {
-        case MAG_LOG_LEVEL_ERROR: color = MAG_CC_RED; break;
-        case MAG_LOG_LEVEL_WARN: color = MAG_CC_YELLOW; break;
-        case MAG_LOG_LEVEL_INFO: color = NULL; break;
-        case MAG_LOG_LEVEL_DEBUG: color = MAG_CC_MAGENTA; break;
-        default:;
-    }
-    fprintf(f, MAG_CC_CYAN "[magnetron] " MAG_CC_RESET "%s", color ? color : "");
-    va_list args;
-    va_start(args, fmt);
-    vfprintf(f, fmt, args);
-    va_end(args);
-    fprintf(f, "%s\n", color ? MAG_CC_RESET : "");
-    if (level == MAG_LOG_LEVEL_ERROR) fflush(f);
+  if (level > mag_log_level_var) return;
+  FILE *f = stdout;
+  const char *color = NULL;
+  switch (level) {
+    case MAG_LOG_LEVEL_ERROR: color = MAG_CC_RED; break;
+    case MAG_LOG_LEVEL_WARN: color = MAG_CC_YELLOW; break;
+    case MAG_LOG_LEVEL_INFO: color = NULL; break;
+    case MAG_LOG_LEVEL_DEBUG: color = MAG_CC_MAGENTA; break;
+    default:;
+  }
+  fprintf(f, MAG_CC_CYAN "[magnetron] " MAG_CC_RESET "%s", color ? color : "");
+  va_list args;
+  va_start(args, fmt);
+  vfprintf(f, fmt, args);
+  va_end(args);
+  fprintf(f, "%s\n", color ? MAG_CC_RESET : "");
+  if (level == MAG_LOG_LEVEL_ERROR) fflush(f);
 }
 
 void MAG_COLDPROC mag_print_separator(FILE *f) {
@@ -130,143 +130,143 @@ void MAG_COLDPROC mag_print_separator(FILE *f) {
 }
 
 void mag_humanize_memory_size(size_t n, double *out, const char **unit) {
-    if (n < (1<<10)) {
-        *out = (double)n;
-        *unit = "B";
-    } else if (n < (1<<20)) {
-        *out = (double)n/(double)(1<<10);
-        *unit = "KiB";
-    } else if (n < (1<<30)) {
-        *out = (double)n/(double)(1<<20);
-        *unit = "MiB";
-    } else {
-        *out = (double)n/(double)(1<<30);
-        *unit = "GiB";
-    }
+  if (n < (1<<10)) {
+    *out = (double)n;
+    *unit = "B";
+  } else if (n < (1<<20)) {
+    *out = (double)n/(double)(1<<10);
+    *unit = "KiB";
+  } else if (n < (1<<30)) {
+    *out = (double)n/(double)(1<<20);
+    *unit = "MiB";
+  } else {
+    *out = (double)n/(double)(1<<30);
+    *unit = "GiB";
+  }
 }
 
 uintptr_t mag_thread_id(void) { /* Get the current thread ID. */
-    uintptr_t tid;
+  uintptr_t tid;
 #if defined(_MSC_VER) && defined(_M_X64)
-    tid = __readgsqword(48);
+  tid = __readgsqword(48);
 #elif defined(_MSC_VER) && defined(_M_IX86)
-    tid = __readfsdword(24);
+  tid = __readfsdword(24);
 #elif defined(_MSC_VER) && defined(_M_ARM64)
-    tid = __getReg(18);
+  tid = __getReg(18);
 #elif defined(__i386__)
-    __asm__ __volatile__("movl %%gs:0, %0" : "=r" (tid));  /* x86-32 WIN32 uses %GS */
+  __asm__ __volatile__("movl %%gs:0, %0" : "=r" (tid));  /* x86-32 WIN32 uses %GS */
 #elif defined(__MACH__) && defined(__x86_64__)
-    __asm__ __volatile__("movq %%gs:0, %0" : "=r" (tid));  /* x86.64 OSX uses %GS */
+  __asm__ __volatile__("movq %%gs:0, %0" : "=r" (tid));  /* x86.64 OSX uses %GS */
 #elif defined(__x86_64__)
-    __asm__ __volatile__("movq %%fs:0, %0" : "=r" (tid));  /* x86-64 Linux and BSD uses %FS */
+  __asm__ __volatile__("movq %%fs:0, %0" : "=r" (tid));  /* x86-64 Linux and BSD uses %FS */
 #elif defined(__arm__)
-    __asm__ __volatile__("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tid));
+  __asm__ __volatile__("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tid));
 #elif defined(__aarch64__) && defined(__APPLE__)
-    __asm__ __volatile__("mrs %0, tpidrro_el0" : "=r" (tid));
+  __asm__ __volatile__("mrs %0, tpidrro_el0" : "=r" (tid));
 #elif defined(__aarch64__)
-    __asm__ __volatile__("mrs %0, tpidr_el0" : "=r" (tid));
+  __asm__ __volatile__("mrs %0, tpidr_el0" : "=r" (tid));
 #elif defined(__powerpc64__)
 #ifdef __clang__
-    tid = (uintptr_t)__builtin_thread_pointer();
+  tid = (uintptr_t)__builtin_thread_pointer();
 #else
-    register uintptr_t tp __asm__ ("r13");
-    __asm__ __volatile__("" : "=r" (tp));
-    tid = tp;
+  register uintptr_t tp __asm__ ("r13");
+  __asm__ __volatile__("" : "=r" (tp));
+  tid = tp;
 #endif
 #elif defined(__powerpc__)
 #ifdef __clang__
-    tid = (uintptr_t)__builtin_thread_pointer();
+  tid = (uintptr_t)__builtin_thread_pointer();
 #else
-    register uintptr_t tp __asm__ ("r2");
-    __asm__ __volatile__("" : "=r" (tp));
-    tid = tp;
+  register uintptr_t tp __asm__ ("r2");
+  __asm__ __volatile__("" : "=r" (tp));
+  tid = tp;
 #endif
 #elif defined(__s390__) && defined(__GNUC__)
-    tid = (uintptr_t)__builtin_thread_pointer();
+  tid = (uintptr_t)__builtin_thread_pointer();
 #elif defined(__riscv)
 #ifdef __clang__
-    tid = (uintptr_t)__builtin_thread_pointer();
+  tid = (uintptr_t)__builtin_thread_pointer();
 #else
-    __asm__ ("mv %0, tp" : "=r" (tid));
+  __asm__ ("mv %0, tp" : "=r" (tid));
 #endif
 #else /* Last resort lol */
-    tid = (uintptr_t)__builtin_thread_pointer();
+  tid = (uintptr_t)__builtin_thread_pointer();
 #endif
-    return tid;
+  return tid;
 }
 
 #ifdef _WIN32
 #include <wchar.h>
 extern __declspec(dllimport) int __stdcall MultiByteToWideChar(
-    unsigned int cp,
-    unsigned long flags,
-    const char *str,
-    int cbmb,
-    wchar_t *widestr,
-    int cchwide
+  unsigned int cp,
+  unsigned long flags,
+  const char *str,
+  int cbmb,
+  wchar_t *widestr,
+  int cchwide
 );
 extern __declspec(dllimport) int __stdcall WideCharToMultiByte(
-    unsigned int cp,
-    unsigned long flags,
-    const wchar_t *widestr,
-    int cchwide,
-    char *str,
-    int cbmb,
-    const char *defchar,
-    int *used_default
+  unsigned int cp,
+  unsigned long flags,
+  const wchar_t *widestr,
+  int cchwide,
+  char *str,
+  int cbmb,
+  const char *defchar,
+  int *used_default
 );
 #endif
 
 /* Open file. Basically fopen but with UTF-8 support on Windows. */
 FILE *mag_fopen(const char *file, const char *mode) {
-    mag_assert(file && *file && mode && *mode, "Invalid file name or mode");
-    FILE *f = NULL;
+  mag_assert(file && *file && mode && *mode, "Invalid file name or mode");
+  FILE *f = NULL;
 #ifdef _WIN32
-    wchar_t w_mode[64];
-    wchar_t w_file[1024];
-    if (MultiByteToWideChar(65001 /* UTF8 */, 0, file, -1, w_file, sizeof(w_file)/sizeof(*w_file)) == 0) return NULL;
-    if (MultiByteToWideChar(65001 /* UTF8 */, 0, mode, -1, w_mode, sizeof(w_mode)/sizeof(*w_mode)) == 0) return NULL;
+  wchar_t w_mode[64];
+  wchar_t w_file[1024];
+  if (MultiByteToWideChar(65001 /* UTF8 */, 0, file, -1, w_file, sizeof(w_file)/sizeof(*w_file)) == 0) return NULL;
+  if (MultiByteToWideChar(65001 /* UTF8 */, 0, mode, -1, w_mode, sizeof(w_mode)/sizeof(*w_mode)) == 0) return NULL;
 #if defined(_MSC_VER) && _MSC_VER >= 1400
-    if (_wfopen_s(&f, w_file, w_mode) != 0)
-        return NULL;
+  if (_wfopen_s(&f, w_file, w_mode) != 0)
+    return NULL;
 #else
-    f = _wfopen(w_file, w_mode);
+  f = _wfopen(w_file, w_mode);
 #endif
 #elif defined(_MSC_VER) && _MSC_VER >= 1400
-    if (fopen_s(&f, filename, mode) != 0) return NULL;
+  if (fopen_s(&f, filename, mode) != 0) return NULL;
 #else
-    f = fopen(file, mode);
+  f = fopen(file, mode);
 #endif
-    return f;
+  return f;
 }
 
 uint64_t mag_hpc_clock_ns(void) { /* High precision clock in nanoseconds. */
 #ifdef _WIN32
-    static LONGLONG t_freq;
-    static LONGLONG t_boot;
-    static bool t_init = false;
-    if (!t_init) { /* Reduce chance of integer overflow when uptime is high. */
-        LARGE_INTEGER li;
-        QueryPerformanceFrequency(&li);
-        t_freq = li.QuadPart;
-        QueryPerformanceCounter(&li);
-        t_boot = li.QuadPart;
-        t_init = true;
-    }
+  static LONGLONG t_freq;
+  static LONGLONG t_boot;
+  static bool t_init = false;
+  if (!t_init) { /* Reduce chance of integer overflow when uptime is high. */
     LARGE_INTEGER li;
+    QueryPerformanceFrequency(&li);
+    t_freq = li.QuadPart;
     QueryPerformanceCounter(&li);
-    return ((li.QuadPart - t_boot)*1000000000) / t_freq;
+    t_boot = li.QuadPart;
+    t_init = true;
+  }
+  LARGE_INTEGER li;
+  QueryPerformanceCounter(&li);
+  return ((li.QuadPart - t_boot)*1000000000) / t_freq;
 #else
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec*1000000000 + (uint64_t)ts.tv_nsec;
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (uint64_t)ts.tv_sec*1000000000 + (uint64_t)ts.tv_nsec;
 #endif
 }
 uint64_t mag_hpc_clock_elapsed_ns(uint64_t start) { /* High precision clock elapsed time in microseconds. */
-    return (uint64_t)llabs((long long)mag_hpc_clock_ns() - (long long)start);
+  return (uint64_t)llabs((long long)mag_hpc_clock_ns() - (long long)start);
 }
 double mag_hpc_clock_elapsed_ms(uint64_t start) { /* High precision clock elapsed time in milliseconds. */
-    return (double)mag_hpc_clock_elapsed_ns(start) / 1e6;
+  return (double)mag_hpc_clock_elapsed_ns(start) / 1e6;
 }
 
 #ifdef _MSC_VER
@@ -276,95 +276,95 @@ extern uint64_t __rdtsc();
 
 uint64_t mag_cycles(void) {
 #ifdef __APPLE__
-    return mach_absolute_time();
+  return mach_absolute_time();
 #elif defined(_MSC_VER)
-    return __rdtsc();
+  return __rdtsc();
 #elif defined(__x86_64__) || defined(__amd64__)
-    uint64_t lo, hi;
-    __asm__ __volatile__("rdtsc" : "=a"(lo), "=d"(hi));
-    return (hi<<32) | lo;
+  uint64_t lo, hi;
+  __asm__ __volatile__("rdtsc" : "=a"(lo), "=d"(hi));
+  return (hi<<32) | lo;
 #else
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (uint64_t)(tv.tv_sec)*1000000 + tv.tv_usec;
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return (uint64_t)(tv.tv_sec)*1000000 + tv.tv_usec;
 #endif
 }
 
 bool mag_utf8_validate(const uint8_t *p, size_t len) {
-    size_t pos = 0;
-    uint32_t cp = 0;
-    while (pos < len) {
-        size_t np = pos+16;
-        if (np <= len) {
-            uint64_t v1, v2;
-            memcpy(&v1, p+pos, sizeof(v1));
-            memcpy(&v2, p+pos+sizeof(v1), sizeof(v2));
-            if (!((v1|v2) & 0x8080808080808080)) {
-                pos = np;
-                continue;
-            }
-        }
-        uint8_t byte = p[pos];
-        while (byte < 0x80) {
-            if (++pos == len) return true;
-            byte = p[pos];
-        }
-        if ((byte & 0xe0) == 0xc0) {
-            np = pos+2;
-            if (mag_unlikely(np > len)) return false;
-            if (mag_unlikely((p[pos+1] & 0xc0) != 0x80)) return false;
-            cp = (byte & 0x1f)<<6 | (p[pos+1] & 0x3f);
-            if (mag_unlikely((cp < 0x80) || (0x7ff < cp))) return false;
-        } else if ((byte & 0xf0) == 0xe0) {
-            np = pos+3;
-            if (mag_unlikely(np > len)) return false;
-            if (mag_unlikely((p[pos+1] & 0xc0) != 0x80)) return false;
-            if (mag_unlikely((p[pos+2] & 0xc0) != 0x80)) return false;
-            cp = (byte & 0xf)<<12 | (p[pos+1] & 0x3f)<<6 | (p[pos+2] & 0x3f);
-            if (mag_unlikely((cp < 0x800) || (0xffff < cp) || (0xd7ff < cp && cp < 0xe000))) return false;
-        } else if ((byte & 0xf8) == 0xf0) {
-            np = pos + 4;
-            if (mag_unlikely(np > len)) return false;
-            if (mag_unlikely((p[pos+1] & 0xc0) != 0x80)) return false;
-            if (mag_unlikely((p[pos+2] & 0xc0) != 0x80)) return false;
-            if (mag_unlikely((p[pos+3] & 0xc0) != 0x80)) return false;
-            cp = (byte & 0x7)<<18 | (p[pos+1] & 0x3f)<<12 | (p[pos+2] & 0x3f)<<6 | (p[pos+3] & 0x3f);
-            if (mag_unlikely(cp <= 0xffff || 0x10ffff < cp)) return false;
-        } else return false;
+  size_t pos = 0;
+  uint32_t cp = 0;
+  while (pos < len) {
+    size_t np = pos+16;
+    if (np <= len) {
+      uint64_t v1, v2;
+      memcpy(&v1, p+pos, sizeof(v1));
+      memcpy(&v2, p+pos+sizeof(v1), sizeof(v2));
+      if (!((v1|v2) & 0x8080808080808080)) {
         pos = np;
+        continue;
+      }
     }
-    return true;
+    uint8_t byte = p[pos];
+    while (byte < 0x80) {
+      if (++pos == len) return true;
+      byte = p[pos];
+    }
+    if ((byte & 0xe0) == 0xc0) {
+      np = pos+2;
+      if (mag_unlikely(np > len)) return false;
+      if (mag_unlikely((p[pos+1] & 0xc0) != 0x80)) return false;
+      cp = (byte & 0x1f)<<6 | (p[pos+1] & 0x3f);
+      if (mag_unlikely((cp < 0x80) || (0x7ff < cp))) return false;
+    } else if ((byte & 0xf0) == 0xe0) {
+      np = pos+3;
+      if (mag_unlikely(np > len)) return false;
+      if (mag_unlikely((p[pos+1] & 0xc0) != 0x80)) return false;
+      if (mag_unlikely((p[pos+2] & 0xc0) != 0x80)) return false;
+      cp = (byte & 0xf)<<12 | (p[pos+1] & 0x3f)<<6 | (p[pos+2] & 0x3f);
+      if (mag_unlikely((cp < 0x800) || (0xffff < cp) || (0xd7ff < cp && cp < 0xe000))) return false;
+    } else if ((byte & 0xf8) == 0xf0) {
+      np = pos + 4;
+      if (mag_unlikely(np > len)) return false;
+      if (mag_unlikely((p[pos+1] & 0xc0) != 0x80)) return false;
+      if (mag_unlikely((p[pos+2] & 0xc0) != 0x80)) return false;
+      if (mag_unlikely((p[pos+3] & 0xc0) != 0x80)) return false;
+      cp = (byte & 0x7)<<18 | (p[pos+1] & 0x3f)<<12 | (p[pos+2] & 0x3f)<<6 | (p[pos+3] & 0x3f);
+      if (mag_unlikely(cp <= 0xffff || 0x10ffff < cp)) return false;
+    } else return false;
+    pos = np;
+  }
+  return true;
 }
 
 char *mag_strdup(const char *s) {
-    if (mag_unlikely(!s)) return NULL;
-    size_t len = strlen(s);
-    char *clone = (*mag_alloc)(NULL, len+1, 0);
-    memcpy(clone, s, len);
-    clone[len] = '\0';
-    return clone;
+  if (mag_unlikely(!s)) return NULL;
+  size_t len = strlen(s);
+  char *clone = (*mag_alloc)(NULL, len+1, 0);
+  memcpy(clone, s, len);
+  clone[len] = '\0';
+  return clone;
 }
 
 void mag_path_split_dir_inplace(char *path, char **out_dir, char **out_file) {
 #ifdef _WIN32
-    char *sep = strrchr(path, '\\');
-    if (!sep) sep = strrchr(path, '/');
+  char *sep = strrchr(path, '\\');
+  if (!sep) sep = strrchr(path, '/');
 #else
-    char *sep = strrchr(path, '/');
+  char *sep = strrchr(path, '/');
 #endif
-    if (sep) {
-        *sep = '\0';
-        *out_dir = path;
-        *out_file = sep+1;
-    } else {
-        *out_dir = path;
-        *out_file = path;
-    }
+  if (sep) {
+    *sep = '\0';
+    *out_dir = path;
+    *out_file = sep+1;
+  } else {
+    *out_dir = path;
+    *out_file = path;
+  }
 }
 
 int mag_casecmp(const char *a, const char *b) {
-    for (; *a && *b; a++, b++)
-        if (tolower((unsigned char)*a) != tolower((unsigned char)*b))
-            return 0;
-    return *a == 0 && *b == 0;
+  for (; *a && *b; a++, b++)
+    if (tolower((unsigned char)*a) != tolower((unsigned char)*b))
+      return 0;
+  return *a == 0 && *b == 0;
 }

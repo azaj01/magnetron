@@ -37,15 +37,15 @@ typedef DWORD mag_thread_ret_t;
 typedef HANDLE mag_thread_t;
 
 static void mag_thread_create(mag_thread_t *out, mag_thread_ret_t (*f)(void *), void *arg) { /* WIN32 -> pthread style wrapper. */
-    HANDLE handle = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)f, arg, 0, NULL);
-    mag_assert2(handle != 0);
-    *out = handle;
+  HANDLE handle = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)f, arg, 0, NULL);
+  mag_assert2(handle != 0);
+  *out = handle;
 }
 
 static void mag_thread_join(mag_thread_t th) { /* WIN32 -> pthread style wrapper. */
-    int ret = (int)WaitForSingleObject(th, INFINITE);
-    CloseHandle(th);
-    mag_assert2(ret == 0);
+  int ret = (int)WaitForSingleObject(th, INFINITE);
+  CloseHandle(th);
+  mag_assert2(ret == 0);
 }
 
 typedef SRWLOCK mag_mutex_t;
@@ -100,10 +100,10 @@ typedef pthread_cond_t mag_condvar_t;
 #endif
 
 typedef enum mag_thread_prio_t {       /* Thread scheduling priority for CPU compute */
-    MAG_THREAD_PRIO_NORMAL = 0,     /* Normal thread priority */
-    MAG_THREAD_PRIO_MEDIUM = 1,     /* Medium thread priority */
-    MAG_THREAD_PRIO_HIGH = 2,       /* High thread priority */
-    MAG_THREAD_PRIO_REALTIME = 3,   /* Real-time thread priority */
+  MAG_THREAD_PRIO_NORMAL = 0,     /* Normal thread priority */
+  MAG_THREAD_PRIO_MEDIUM = 1,     /* Medium thread priority */
+  MAG_THREAD_PRIO_HIGH = 2,       /* High thread priority */
+  MAG_THREAD_PRIO_REALTIME = 3,   /* Real-time thread priority */
 } mag_thread_prio_t;
 
 extern MAG_EXPORT void mag_thread_set_prio(mag_thread_prio_t prio); /* Set thread scheduling priority of current thread. */

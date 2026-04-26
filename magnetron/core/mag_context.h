@@ -23,31 +23,31 @@ extern "C" {
 
 /* Context specific flags. */
 typedef enum mag_context_flags_t {
-    MAG_CTX_FLAG_NONE = 0,
-    MAG_CTX_FLAG_GRAD_RECORDER = 1<<0,     /* Gradient recording is currently active. */
+  MAG_CTX_FLAG_NONE = 0,
+  MAG_CTX_FLAG_GRAD_RECORDER = 1<<0,     /* Gradient recording is currently active. */
 } mag_context_flags_t;
 
 typedef struct mag_rt_telemetry_t {
-    size_t num_alive_tensors;                   /* Total tensor instances allocated. */
-    size_t num_alive_storages;                  /* Total storage buffers allocated. */
-    size_t num_created_tensors;                 /* Total tensor instances created. */
-    size_t storage_bytes_allocated;             /* Total bytes allocated for storage buffers. */
-    size_t ops_dispatched;                      /* Total number of dispatched operations. */
+  size_t num_alive_tensors;                   /* Total tensor instances allocated. */
+  size_t num_alive_storages;                  /* Total storage buffers allocated. */
+  size_t num_created_tensors;                 /* Total tensor instances created. */
+  size_t storage_bytes_allocated;             /* Total bytes allocated for storage buffers. */
+  size_t ops_dispatched;                      /* Total number of dispatched operations. */
 } mag_rt_telemetry_t;
 
 struct mag_context_t {
-    uintptr_t tr_id;                            /* Context thread ID. */
-    mag_context_flags_t flags;                  /* Context flags. */
-    mag_dtype_t default_dtype;               /* Default floating point data type for the context. */
-    mag_machine_info_t machine;                 /* Machine information. */
-    mag_rt_telemetry_t telemetry;               /* Runtime telemetry */
-    mag_slab_alloc_t tensor_slab;               /* Tensor headers. */
-    mag_slab_alloc_t storage_slab;              /* Storage headers. */
-    mag_slab_alloc_t view_meta_slab;            /* View metadata headers. */
-    mag_slab_alloc_t au_state_slab;             /* Autodiff states. */
-    mag_backend_registry_t *backend_registry;   /* Compute backend registry */
+  uintptr_t tr_id;                            /* Context thread ID. */
+  mag_context_flags_t flags;                  /* Context flags. */
+  mag_dtype_t default_dtype;               /* Default floating point data type for the context. */
+  mag_machine_info_t machine;                 /* Machine information. */
+  mag_rt_telemetry_t telemetry;               /* Runtime telemetry */
+  mag_slab_alloc_t tensor_slab;               /* Tensor headers. */
+  mag_slab_alloc_t storage_slab;              /* Storage headers. */
+  mag_slab_alloc_t view_meta_slab;            /* View metadata headers. */
+  mag_slab_alloc_t au_state_slab;             /* Autodiff states. */
+  mag_backend_registry_t *backend_registry;   /* Compute backend registry */
 #ifdef MAG_DEBUG
-    mag_tensor_t *alive_head;                   /* List of alive tensors used for leak detection. */
+  mag_tensor_t *alive_head;                   /* List of alive tensors used for leak detection. */
 #endif
 };
 

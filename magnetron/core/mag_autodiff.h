@@ -20,13 +20,13 @@ extern "C" {
 
 /* Autodiff state for parameters */
 struct mag_au_state_t {
-    MAG_RC_INJECT_HEADER; /* RC Control block must be first */
+  MAG_RC_INJECT_HEADER; /* RC Control block must be first */
 
-    mag_context_t *ctx;
-    mag_opcode_t op;
-    mag_tensor_t *op_inputs[MAG_MAX_OP_INPUTS];
-    mag_op_attr_t op_attrs[MAG_MAX_OP_PARAMS];
-    mag_tensor_t *grad;
+  mag_context_t *ctx;
+  mag_opcode_t op;
+  mag_tensor_t *op_inputs[MAG_MAX_OP_INPUTS];
+  mag_op_attr_t op_attrs[MAG_MAX_OP_PARAMS];
+  mag_tensor_t *grad;
 };
 MAG_RC_OBJECT_IS_VALID(mag_au_state_t);
 

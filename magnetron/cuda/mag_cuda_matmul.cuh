@@ -14,7 +14,7 @@
 #include "mag_cuda.cuh"
 
 namespace mag {
-    constexpr int MATMUL_BLOCK_SIZE = 256;
+  constexpr int MATMUL_BLOCK_SIZE = 256;
 
-    extern void misc_op_matmul(const mag_command_t &cmd);
+  extern void misc_op_matmul(const mag_command_t &cmd);
 }

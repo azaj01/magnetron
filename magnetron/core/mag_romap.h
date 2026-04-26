@@ -19,11 +19,11 @@ extern "C" {
 #endif
 
 typedef struct mag_bucket_t {
-    void *key;
-    void *val;
-    uint64_t hash;
-    uint32_t len;
-    uint32_t psl;
+  void *key;
+  void *val;
+  uint64_t hash;
+  uint32_t len;
+  uint32_t psl;
 } mag_bucket_t;
 
 /*
@@ -31,13 +31,13 @@ typedef struct mag_bucket_t {
 ** When clone_keys = false, the map does not take ownership of the keys.
 */
 typedef struct mag_map_t {
-    bool clone_keys;
-    size_t size;
-    size_t nitems;
-    size_t minsize;
-    mag_bucket_t  *buckets;
-    uint32_t hash_seed;
-    mag_bucket_t init_bucket;
+  bool clone_keys;
+  size_t size;
+  size_t nitems;
+  size_t minsize;
+  mag_bucket_t  *buckets;
+  uint32_t hash_seed;
+  mag_bucket_t init_bucket;
 } mag_map_t;
 
 extern MAG_EXPORT void mag_map_init(mag_map_t *map, size_t cap, bool clone_keys);

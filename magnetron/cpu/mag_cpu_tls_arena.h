@@ -21,11 +21,11 @@ extern "C" {
 #define MAG_MM_SCRATCH_ALIGN MAG_DESTRUCTIVE_INTERFERENCE_SIZE
 
 typedef struct mag_scratch_arena_t {
-    uint8_t *base;
-    size_t cap;
-    size_t pos;
-    size_t hi;
-    size_t keep;
+  uint8_t *base;
+  size_t cap;
+  size_t pos;
+  size_t hi;
+  size_t keep;
 } mag_scratch_arena_t;
 
 #define MAG_SCRATCH_ARENA_INIT(keep) { NULL, 0, 0, 0, (keep) }

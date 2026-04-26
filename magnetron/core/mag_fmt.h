@@ -19,9 +19,9 @@ extern "C" {
 #endif
 
 typedef enum mag_format_type_t {
-    MAG_FMT_EOF, MAG_FMT_ERR, MAG_FMT_LIT, MAG_FMT_INT,
-    MAG_FMT_UINT, MAG_FMT_NUM, MAG_FMT_STR, MAG_FMT_CHAR,
-    MAG_FMT_PTR
+  MAG_FMT_EOF, MAG_FMT_ERR, MAG_FMT_LIT, MAG_FMT_INT,
+  MAG_FMT_UINT, MAG_FMT_NUM, MAG_FMT_STR, MAG_FMT_CHAR,
+  MAG_FMT_PTR
 } mag_format_type_t;
 
 typedef uint32_t mag_format_flags_t; /* Flags for formatting output */

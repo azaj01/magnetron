@@ -26,27 +26,27 @@ extern "C" {
 #endif
 
 typedef struct mag_numa_node_t {
-    uint32_t cpus[MAG_MAX_CPUS];
-    uint32_t num_cpus;
+  uint32_t cpus[MAG_MAX_CPUS];
+  uint32_t num_cpus;
 } mag_numa_node_t;
 
 typedef enum mag_numa_strategy_t {
-    MAG_NUMA_STRATEGY_DISABLED,
-    MAG_NUMA_STRATEGY_DISTRIBUTE,
-    MAG_NUMA_STRATEGY_ISOLATE,
-    MAG_NUMA_STRATEGY_NUMACTL
+  MAG_NUMA_STRATEGY_DISABLED,
+  MAG_NUMA_STRATEGY_DISTRIBUTE,
+  MAG_NUMA_STRATEGY_ISOLATE,
+  MAG_NUMA_STRATEGY_NUMACTL
 } mag_numa_strategy_t;
 
 typedef struct mag_numa_node_controller_t {
-    mag_numa_strategy_t strategy;
-    mag_numa_node_t nodes[MAG_MAX_NUMA_NODES];
-    uint32_t num_nodes;
-    uint32_t num_cpus;
-    uint32_t curr_node;
+  mag_numa_strategy_t strategy;
+  mag_numa_node_t nodes[MAG_MAX_NUMA_NODES];
+  uint32_t num_nodes;
+  uint32_t num_cpus;
+  uint32_t curr_node;
 #ifdef __gnu_linux__
-    cpu_set_t cpuset;
+  cpu_set_t cpuset;
 #else  /* Only Linux support for NUMA right now. TODO: Win32 numa support */
-    int cpuset;
+  int cpuset;
 #endif
 } mag_numa_node_controller_t;
 
