@@ -12,4 +12,4 @@
 #define MAG_BLAS_SPECIALIZATION mag_cpu_blas_specialization_loongarch64_lasx
 #define MAG_BLAS_SPECIALIZATION_FEAT_REQUEST mag_cpu_blas_specialization_loongarch64_lasx_features
 
-#include "../kernels/mag_cpu_impl.inl"
+#include "../kernels/mag_cpu_dispatch.h"

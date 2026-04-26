@@ -22,17 +22,6 @@
 /* Print host system and machine information. */
 static void mag_system_host_info_dump(mag_context_t *ctx) {
     mag_log_info("OS/Kernel: %s", ctx->machine.os_name);
-    const char *cpu_arch = "?";
-    (void)cpu_arch;
-#if defined(__x86_64__) || defined(_M_X64)
-    cpu_arch = "x86-64";
-#elif defined(__aarch64__) || defined(_M_ARM64)
-    cpu_arch = "aarch64";
-#elif defined(__loongarch64)
-    cpu_arch = "loongarch64";
-#else
-#error "Unknwon CPU arch"
-#endif
     mag_log_info(
         "CPU: %s, Virtual Cores: %u, Physical Cores: %u, Sockets: %u, L1D: %.01f KiB, L2: %.01f KiB, L3: %.01f MiB",
         ctx->machine.cpu_name,
@@ -45,7 +34,7 @@ static void mag_system_host_info_dump(mag_context_t *ctx) {
     );
 #if defined(__x86_64__) || defined(_M_X64) /* Print detected CPU features for x86-64 platforms. */
     if (mag_log_level() >= MAG_LOG_LEVEL_INFO) {
-        mag_log_info("%s CPU flags:", cpu_arch);
+        mag_log_info("AMD64 (x86-64) CPU flags:");
         for (uint32_t i=0, j=0; i < MAG_AMD64_CAP__NUM; ++i) {
             if (i == MAG_AMD64_CAP_AMD || i == MAG_AMD64_CAP_INTEL) continue; /* Skip vendor caps */
             if (ctx->machine.amd64_cpu_caps & mag_amd64_cap_bit(i)) {
@@ -57,15 +46,19 @@ static void mag_system_host_info_dump(mag_context_t *ctx) {
     }
 #elif defined(__aarch64__) /* Print detected CPU features for ARM64 platforms. */
     if (mag_log_level() >= MAG_LOG_LEVEL_INFO) {
-        mag_log_info("%s CPU flags:", cpu_arch);
-        for (uint32_t i=0; i < MAG_ARM64_CAP__NUM; ++i)
-            if (ctx->machine.arm64_cpu_caps & (1ull<<i))
+        mag_log_info("ARM64 (aarch64) CPU flags:");
+        for (uint32_t i=0, j=0; i < MAG_ARM64_CAP__NUM; ++i) {
+            if (ctx->machine.arm64_cpu_caps & mag_arm64_cap_bit(i)) {
+                if (!(j++&7)) printf(j-1 ? "\n\t" : "\t");
                 printf("%s ", mag_arm64_cpu_cap_names[i]);
+            }
+
+        }
         putchar('\n');
     }
 #elif defined(__loongarch64) /* Print detected CPU features for Loongson / Godson */
     if (mag_log_level() >= MAG_LOG_LEVEL_INFO) {
-        mag_log_info("%s CPU flags:", cpu_arch);
+        mag_log_info("LOONGSON (loongarch64) CPU flags:");
         for (uint32_t i=0, j=0; i < MAG_LOONGARCH64_CAP__NUM; ++i) {
             if (ctx->machine.loongarch64_cpu_caps & mag_loongarch64_cap_bit(i)) {
                 if (!(j++&7)) printf(j-1 ? "\n\t" : "\t");

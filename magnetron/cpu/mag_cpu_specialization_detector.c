@@ -24,7 +24,7 @@ typedef struct mag_cpu_specialization_t {
 } mag_cpu_specialization_t;
 
 #define mag_cpu_specialization_extern(arch, flag) \
-extern mag_amd64_cap_bitset_t mag_cpu_blas_specialization_##arch##_##flag##_features(void); \
+extern uint64_t mag_cpu_blas_specialization_##arch##_##flag##_features(void); \
 extern void mag_cpu_blas_specialization_##arch##_##flag(mag_kernel_registry_t *kernels)
 
 #define mag_cpu_specialization_configure(arch, flag) \
@@ -178,76 +178,45 @@ extern void mag_cpu_blas_specialization_##arch##_##flag(mag_kernel_registry_t *k
 
 #elif defined(__aarch64__) || defined(_M_ARM64)
 
-typedef struct mag_arm64_specialization_dispatch_t {
-    const char *name;
-    mag_arm64_cap_bitset_t (*get_cap_permutation)(void);
-    void (*inject_kernels)(mag_kernel_registry_t *kernels);
-} mag_arm64_specialization_dispatch_t;
+    static uint64_t mag_get_cpu_host_caps(const mag_context_t *ctx) { return ctx->machine.arm64_cpu_caps; }
 
-#define mag_arm64_spec_extern(feat) \
-    mag_arm64_cap_bitset_t mag_cpu_blas_specialization_arm64_v##feat##_features(void); \
-    extern void mag_cpu_blas_specialization_arm64_v##feat(mag_kernel_registry_t* kernels)
-
-#define mag_arm64_spec_dispatch(feat) \
-    (mag_arm64_specialization_dispatch_t) { \
-        .name = "arm64-v."#feat, \
-        .get_cap_permutation = &mag_cpu_blas_specialization_arm64_v##feat##_features, \
-        .inject_kernels = &mag_cpu_blas_specialization_arm64_v##feat \
-}
-
-#ifdef MAG_HAVE_CPU_ARMV9_A_SVE2
-mag_arm64_spec_extern(9_sve2);
-#endif
-#ifdef MAG_HAVE_CPU_ARMV8_2_A_SVE
-mag_arm64_spec_extern(82_sve);
-#endif
-#ifdef MAG_HAVE_CPU_ARMV8_6_A_BF16_I8MM_FP16_DOTPROD_CRYPTO
-mag_arm64_spec_extern(86_crypto);
-#endif
-#ifdef MAG_HAVE_CPU_ARMV8_6_A_BF16_I8MM_FP16_DOTPROD
-mag_arm64_spec_extern(86);
-#endif
-#ifdef MAG_HAVE_CPU_ARMV8_2_A_DOTPROD_FP16
-mag_arm64_spec_extern(82);
-#endif
-
-static bool mag_blas_detect_gen_optimal_spec(const mag_context_t *ctx, mag_kernel_registry_t *kernels) {
-    const mag_arm64_specialization_dispatch_t impls[] = { /* Dynamic selectable BLAS permutations, sorted from best to worst score. */
+    static const mag_cpu_specialization_t *mag_get_cpu_specializations(const mag_context_t *ctx, size_t *num) {
         #ifdef MAG_HAVE_CPU_ARMV9_A_SVE2
-            mag_arm64_spec_dispatch(9_sve2),
+            mag_cpu_specialization_extern(arm64, v9_sve2);
         #endif
         #ifdef MAG_HAVE_CPU_ARMV8_2_A_SVE
-            mag_arm64_spec_dispatch(82_sve),
+            mag_cpu_specialization_extern(arm64, v82_sve);
         #endif
         #ifdef MAG_HAVE_CPU_ARMV8_6_A_BF16_I8MM_FP16_DOTPROD_CRYPTO
-            mag_arm64_spec_dispatch(86_crypto),
+            mag_cpu_specialization_extern(arm64, v86_crypto);
         #endif
         #ifdef MAG_HAVE_CPU_ARMV8_6_A_BF16_I8MM_FP16_DOTPROD
-            mag_arm64_spec_dispatch(86),
+            mag_cpu_specialization_extern(arm64, v86);
         #endif
         #ifdef MAG_HAVE_CPU_ARMV8_2_A_DOTPROD_FP16
-            mag_arm64_spec_dispatch(82),
+            mag_cpu_specialization_extern(arm64, v82);
         #endif
-    };
 
-    mag_arm64_cap_bitset_t cap_avail = ctx->machine.arm64_cpu_caps;
-    for (size_t i=0; i < sizeof(impls)/sizeof(*impls); ++i) { /* Find best blas spec for the host CPU */
-        const mag_arm64_specialization_dispatch_t *spec = impls+i;
-        mag_arm64_cap_bitset_t cap_required = (*spec->get_cap_permutation)(); /* Get requires features */
-        if ((cap_avail & cap_required) == cap_required) { /* Since specializations are sorted by score, we found the perfect spec. */
-            (*spec->inject_kernels)(kernels);
-            mag_log_info("Using tuned BLAS specialization: %s", spec->name);
-            return true;
-        }
+      static const mag_cpu_specialization_t specializations[] = { /* Dynamic selectable BLAS permutations, sorted from best to worst score. */
+            #ifdef MAG_HAVE_CPU_ARMV9_A_SVE2
+              mag_cpu_specialization_configure(arm64, v9_sve2),
+            #endif
+            #ifdef MAG_HAVE_CPU_ARMV8_2_A_SVE
+              mag_cpu_specialization_configure(arm64, v82_sve),
+            #endif
+            #ifdef MAG_HAVE_CPU_ARMV8_6_A_BF16_I8MM_FP16_DOTPROD_CRYPTO
+              mag_cpu_specialization_configure(arm64, v86_crypto),
+            #endif
+            #ifdef MAG_HAVE_CPU_ARMV8_6_A_BF16_I8MM_FP16_DOTPROD
+              mag_cpu_specialization_configure(arm64, v86),
+            #endif
+            #ifdef MAG_HAVE_CPU_ARMV8_2_A_DOTPROD_FP16
+              mag_cpu_specialization_configure(arm64, v82),
+            #endif
+        };
+        *num = sizeof(specializations)/sizeof(*specializations);
+        return specializations;
     }
-
-    /* No matching specialization found, use generic */
-    mag_cpu_blas_specialization_fallback(kernels);
-    mag_log_info("Using fallback BLAS specialization");
-    return false; /* No spec used, fallback is active */
-}
-
-#undef mag_cpu_blas_spec_decl
 
 #elif defined(__loongarch64) /* Loongson / Godson backend selection */
 
