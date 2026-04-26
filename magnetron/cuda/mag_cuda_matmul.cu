@@ -29,18 +29,6 @@
 #define MAG_CUDA_MATMUL_USE_WMMA 1
 
 namespace mag {
-    enum class mat_layout_t {
-        packed,
-        packed_transposed,
-        unsupported
-    };
-
-    struct mat_layout_info_t {
-        mat_layout_t layout;
-        bool batch_packed;
-        [[nodiscard]] static mat_layout_info_t detect(const mag_tensor_t *tensor);
-    };
-
 #if MAG_CUDA_MATMUL_USE_WMMA /* WMMA + TMA fast kernel */
 
     [[nodiscard]] static int64_t tensor_batch_total(const mag_tensor_t *tensor) {
@@ -898,13 +886,14 @@ namespace mag {
 
         mag_assert2(mag_tensor_is_contiguous(r));
 
-        mat_layout_info_t xli = mat_layout_info_t::detect(x);
-        mat_layout_info_t yli = mat_layout_info_t::detect(y);
+        bool x_batch_packed, y_batch_packed;
+        mag_mat_layout_type_t x_layout = mag_mat_layout_detect(&x->coords, &x_batch_packed);
+        mag_mat_layout_type_t y_layout = mag_mat_layout_detect(&y->coords, &y_batch_packed);
 
-        bool x_ok = xli.layout != mat_layout_t::unsupported && xli.batch_packed;
-        bool y_ok = yli.layout != mat_layout_t::unsupported && yli.batch_packed;
-        bool xT = x_ok && xli.layout == mat_layout_t::packed_transposed;
-        bool yT = y_ok && yli.layout == mat_layout_t::packed_transposed;
+        bool x_ok = x_layout != MAG_MAT_LAYOUT_TYPE_OTHER && x_batch_packed;
+        bool y_ok = y_layout != MAG_MAT_LAYOUT_TYPE_OTHER && y_batch_packed;
+        bool xT = x_ok && x_layout == MAG_MAT_LAYOUT_TYPE_TRANSPOSED;
+        bool yT = y_ok && y_layout == MAG_MAT_LAYOUT_TYPE_TRANSPOSED;
 
         bool cloned_x = false;
         bool cloned_y = false;
@@ -964,38 +953,5 @@ namespace mag {
             case MAG_DTYPE_BFLOAT16: launch_matmul<__nv_bfloat16>(cmd); break;
             default: mag_assert(false, "matmul: unsupported dtype");
         }
-    }
-
-    mat_layout_info_t mat_layout_info_t::detect(const mag_tensor_t *tensor) {
-        mat_layout_info_t info{mat_layout_t::unsupported, false};
-        int64_t rank = tensor->coords.rank;
-        if (rank < 2) {
-            info.layout = mat_layout_t::packed;
-            info.batch_packed = true;
-            return info;
-        }
-        int64_t rows = tensor->coords.shape[rank-2];
-        int64_t cols = tensor->coords.shape[rank-1];
-        int64_t srow = tensor->coords.strides[rank-2];
-        int64_t scol = tensor->coords.strides[rank-1];
-        if (scol == 1 && srow == cols) info.layout = mat_layout_t::packed;
-        else if (srow == 1 && scol == rows) info.layout = mat_layout_t::packed_transposed;
-        else return info;
-        int64_t expected_batch_stride = rows*cols;
-        if (rank == 2) {
-            info.batch_packed = true;
-            return info;
-        }
-        int64_t running = expected_batch_stride;
-        for (int64_t i=rank-3; i >= 0; --i) {
-            if (tensor->coords.strides[i] != running) {
-                info.layout = mat_layout_t::unsupported;
-                info.batch_packed = false;
-                return info;
-            }
-            running *= tensor->coords.shape[i];
-        }
-        info.batch_packed = true;
-        return info;
     }
 }

@@ -200,3 +200,24 @@ bool mag_infer_missing_dim(int64_t(*out)[MAG_MAX_DIMS], const int64_t *dims, int
     } else if (mag_unlikely(prod != numel)) return false; /* Product does not match numel */
     return true;
 }
+
+mag_mat_layout_type_t mag_mat_layout_detect(const mag_coords_t *coords, bool *out_batch_packed) {
+    int64_t ra = coords->rank;
+    if (ra < 2) { *out_batch_packed = true; return MAG_MAT_LAYOUT_TYPE_PACKED; }
+    int64_t rows = coords->shape[ra-2];
+    int64_t cols = coords->shape[ra-1];
+    int64_t srows = coords->strides[ra-2];
+    int64_t scols = coords->strides[ra-1];
+    mag_mat_layout_type_t layout = MAG_MAT_LAYOUT_TYPE_OTHER;
+    if (scols == 1 && srows == cols) layout = MAG_MAT_LAYOUT_TYPE_PACKED;
+    else if (srows == 1 && scols == rows) layout = MAG_MAT_LAYOUT_TYPE_TRANSPOSED;
+    else { *out_batch_packed = false; return MAG_MAT_LAYOUT_TYPE_OTHER; }
+    if (ra == 2) { *out_batch_packed = true; return layout; }
+    int64_t prod = rows*cols;
+    for (int64_t i = ra-3; i >= 0; --i) {
+        if (coords->strides[i] != prod) { *out_batch_packed = false; return MAG_MAT_LAYOUT_TYPE_OTHER; }
+        prod *= coords->shape[i];
+    }
+    *out_batch_packed = true;
+    return layout;
+}
