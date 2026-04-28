@@ -13,6 +13,77 @@
 #include "core/mag_tensor.h"
 
 namespace mag::bindings {
+  template <typename T>
+  [[nodiscard]] static nb::object ndarray_to_obj(nb::ndarray<nb::numpy, T> &&arr) { return nb::cast(std::move(arr)); }
+
+  [[nodiscard]] static nb::object ndarray_f32(void *base, int64_t rank, const std::vector<size_t> &shape, const std::vector<int64_t> &strides, const nb::object &owner) {
+    if (!rank) return ndarray_to_obj(nb::ndarray<nb::numpy, float>(base, {}, owner, {}, nb::dtype<float>()));
+    return ndarray_to_obj(nb::ndarray<nb::numpy, float>(base, static_cast<size_t>(rank), shape.data(), owner, strides.data(), nb::dtype<float>()));
+  }
+
+  [[nodiscard]] static nb::object ndarray_f16(void *base, int64_t rank, const std::vector<size_t> &shape, const std::vector<int64_t> &strides, const nb::object &owner) {
+    if (!rank) return ndarray_to_obj(nb::ndarray<nb::numpy, mag_float16_t>(base, {}, owner, {}, nb::dtype<mag_float16_t>()));
+    return ndarray_to_obj(nb::ndarray<nb::numpy, mag_float16_t>(base, static_cast<size_t>(rank), shape.data(), owner, strides.data(), nb::dtype<mag_float16_t>()));
+  }
+
+  [[nodiscard]] static nb::object ndarray_bf16(void *base, int64_t rank, const std::vector<size_t> &shape, const std::vector<int64_t> &strides, const nb::object &owner) {
+    if (!rank) return ndarray_to_obj(nb::ndarray<nb::numpy, mag_bfloat16_t>(base, {}, owner, {}, nb::dtype<mag_bfloat16_t>()));
+    return ndarray_to_obj(nb::ndarray<nb::numpy, mag_bfloat16_t>(base, static_cast<size_t>(rank), shape.data(), owner, strides.data(), nb::dtype<mag_bfloat16_t>()));
+  }
+
+  template <typename T>
+  [[nodiscard]] static nb::object ndarray_int(void *base, int64_t rank, const std::vector<size_t> &shape, const std::vector<int64_t> &strides, const nb::object &owner) {
+    if (!rank) return ndarray_to_obj(nb::ndarray<nb::numpy, T>(static_cast<T *>(base), {}, owner, {}, nb::dtype<T>()));
+    return ndarray_to_obj(nb::ndarray<nb::numpy, T>(static_cast<T *>(base), static_cast<size_t>(rank), shape.data(), owner, strides.data(), nb::dtype<T>()));
+  }
+
+  [[nodiscard]] static nb::object ndarray_bool(void *base, int64_t rank, const std::vector<size_t> &shape, const std::vector<int64_t> &strides, const nb::object &owner) {
+    if (!rank) return ndarray_to_obj(nb::ndarray<nb::numpy, uint8_t>(base, {}, owner, {}, nb::dtype<bool>()));
+    return ndarray_to_obj(nb::ndarray<nb::numpy, uint8_t>(base, static_cast<size_t>(rank), shape.data(), owner, strides.data(), nb::dtype<bool>()));
+  }
+
+  [[nodiscard]] static nb::object tensor_from_numpy(const tensor_wrapper &self) {
+    std::lock_guard lock {get_global_mutex()};
+    mag_error_t err {};
+    mag_device_id_t cpu = mag_device(CPU, 0);
+    mag_tensor_t *tensor = *self;
+    tensor_wrapper host {};
+    if (!mag_device_id_eq(mag_tensor_device_id(tensor), cpu)) {
+      mag_tensor_t *host_ptr = nullptr;
+      throw_if_error(mag_transfer(&err, &host_ptr, tensor, cpu), err);
+      host = tensor_wrapper{host_ptr};
+      tensor = host_ptr;
+    }
+    int64_t rank = mag_tensor_rank(tensor);
+    const int64_t *p_shape = mag_tensor_shape_ptr(tensor);
+    const int64_t *p_strides = mag_tensor_strides_ptr(tensor);
+    void *base = reinterpret_cast<void *>(mag_tensor_data_ptr(tensor));
+    std::vector<size_t> shape(static_cast<size_t>(std::max<int64_t>(0, rank)));
+    std::vector<int64_t> strides(static_cast<size_t>(std::max<int64_t>(0, rank)));
+    for (size_t i=0; i < static_cast<size_t>(rank); ++i) {
+      shape[i] = static_cast<size_t>(p_shape[i]);
+      strides[i] = p_strides[i];
+    }
+    mag_dtype_t dtype = mag_tensor_type(tensor);
+    nb::object owner = host.p ? nb::cast(host) : nb::cast(self);
+    switch (dtype) {
+      /* MAG_DTYPE_FLOAT64 not yet in magnetron; float64 arrays rejected below */
+      case MAG_DTYPE_FLOAT32: return ndarray_f32(base, rank, shape, strides, owner);
+      case MAG_DTYPE_FLOAT16: return ndarray_f16(base, rank, shape, strides, owner);
+      case MAG_DTYPE_BFLOAT16: return ndarray_bf16(base, rank, shape, strides, owner);
+      case MAG_DTYPE_BOOLEAN: return ndarray_bool(base, rank, shape, strides, owner);
+      case MAG_DTYPE_UINT8: return ndarray_int<uint8_t>(base, rank, shape, strides, owner);
+      case MAG_DTYPE_INT8: return ndarray_int<int8_t>(base, rank, shape, strides, owner);
+      case MAG_DTYPE_UINT16: return ndarray_int<uint16_t>(base, rank, shape, strides, owner);
+      case MAG_DTYPE_INT16: return ndarray_int<int16_t>(base, rank, shape, strides, owner);
+      case MAG_DTYPE_UINT32: return ndarray_int<uint32_t>(base, rank, shape, strides, owner);
+      case MAG_DTYPE_INT32: return ndarray_int<int32_t>(base, rank, shape, strides, owner);
+      case MAG_DTYPE_UINT64: return ndarray_int<uint64_t>(base, rank, shape, strides, owner);
+      case MAG_DTYPE_INT64: return ndarray_int<int64_t>(base, rank, shape, strides, owner);
+      default: throw nb::type_error("Tensor.numpy(): unsupported dtype");
+    }
+  }
+
   template <typename T, typename PT>
   [[nodiscard]] static nb::object build_list_recursive(
     const T *data,
@@ -22,7 +93,7 @@ namespace mag::bindings {
     int64_t offset,
     int64_t dim
   ) {
-    if (dim == rank) return PT(data[offset]);
+    if (dim == rank) return PT();
     int64_t size = shape[dim];
     PyObject *raw = PyList_New(size); // We use the raw Python API to preallocate the list's capacity
     if (!raw) throw std::runtime_error {"Failed to allocate list for tolist()"};
@@ -229,7 +300,10 @@ namespace mag::bindings {
       std::lock_guard lock {get_global_mutex()};
       mag_error_t err {};
       throw_if_error(mag_save_audio(&err, *self, path.c_str(), sample_rate), err);
-    });
+    })
+    .def("numpy", [](const tensor_wrapper &self) {
+      return tensor_from_numpy(self);
+    }, "Return a NumPy ndarray sharing CPU storage when possible. Non-CPU tensors are copied to the host first.");
   }
 
   extern void init_tensor_special_methods(nb::class_<tensor_wrapper> &cls);

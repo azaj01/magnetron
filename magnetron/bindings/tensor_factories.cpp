@@ -14,40 +14,18 @@
 #include <algorithm>
 #include <numeric>
 
-#include <nanobind/ndarray.h>
-
 #include <core/mag_operator.h>
-#include <core/mag_bfloat16.h>
 
 #include "core/mag_context.h"
-
-namespace nanobind::detail {
-  template <> struct dtype_traits<mag_float16_t> {
-    static constexpr dlpack::dtype value {
-      static_cast<uint8_t>(dlpack::dtype_code::Float),
-      16,
-      1
-    };
-    static constexpr auto name = const_name("float16");
-  };
-  template <> struct dtype_traits<mag_bfloat16_t> {
-    static constexpr dlpack::dtype value {
-      static_cast<uint8_t>(dlpack::dtype_code::Bfloat),
-      16,
-      1
-    };
-    static constexpr auto name = const_name("bfloat16");
-  };
-}
 
 namespace mag::bindings {
   /** Map nanobind ndarray dtype to mag_dtype_t. Returns MAG_DTYPE__NUM if unsupported. */
   template <typename... Args>
   [[nodiscard]] static mag_dtype_t ndarray_dtype_to_mag_dtype(const nb::ndarray<Args...> &arr) {
+    /* MAG_DTYPE_FLOAT64 not yet in magnetron; float64 arrays rejected below */
     if (arr.dtype() == nb::dtype<float>()) return MAG_DTYPE_FLOAT32;
     if (arr.dtype() == nb::dtype<mag_float16_t>()) return MAG_DTYPE_FLOAT16;
     if (arr.dtype() == nb::dtype<mag_bfloat16_t>()) return MAG_DTYPE_BFLOAT16;
-    /* MAG_DTYPE_FLOAT64 not yet in magnetron; float64 arrays rejected below */
     if (arr.dtype() == nb::dtype<bool>()) return MAG_DTYPE_BOOLEAN;
     if (arr.dtype() == nb::dtype<uint8_t>()) return MAG_DTYPE_UINT8;
     if (arr.dtype() == nb::dtype<int8_t>()) return MAG_DTYPE_INT8;
@@ -58,6 +36,13 @@ namespace mag::bindings {
     if (arr.dtype() == nb::dtype<uint64_t>()) return MAG_DTYPE_UINT64;
     if (arr.dtype() == nb::dtype<int64_t>()) return MAG_DTYPE_INT64;
     return MAG_DTYPE__NUM;
+  }
+
+  static void mag_bindings_borrow_release(void *user) {
+    if (!user) return;
+    PyGILState_STATE g = PyGILState_Ensure();
+    Py_DECREF(static_cast<PyObject *>(user));
+    PyGILState_Release(g);
   }
 
   [[nodiscard]] static dtype_wrapper kw_dtype_or(nb::kwargs &kwargs, dtype_wrapper def) {
@@ -84,24 +69,24 @@ namespace mag::bindings {
     throw_if_error(mag_tensor_set_requires_grad(&err, t, true), err);
   }
 
-  // Create a tensor from a Python scalar, list or Numpy/Pytorch CPU tensor.
-  [[nodiscard]] static tensor_wrapper tensor_from_data(nb::handle data_h, nb::kwargs &kwargs) {
-    dtype_wrapper dt = kwargs.contains("dtype") ? nb::cast<dtype_wrapper>(kwargs["dtype"]) : dtype_wrapper{MAG_DTYPE__NUM};
+   // Create a tensor from a Python scalar, list or Numpy/Pytorch CPU tensor.
+  [[nodiscard]] static tensor_wrapper tensor_from_data(nb::handle handle, nb::kwargs &kwargs) {
+    dtype_wrapper dtype = kwargs.contains("dtype") ? nb::cast<dtype_wrapper>(kwargs["dtype"]) : dtype_wrapper{MAG_DTYPE__NUM};
     bool requires_grad = kw_requires_grad_or(kwargs, false);
     std::optional<mag_device_id_t> device_id = parse_device_id_str(kw_device_or_default(kwargs));
     if (!device_id) throw std::runtime_error {"Invalid device id"};
-    const mag_device_id_t cpu_id = mag_device(CPU, 0);
-    if (nb::isinstance<nb::int_>(data_h) || nb::isinstance<nb::float_>(data_h) || nb::isinstance<nb::bool_>(data_h)) {
-      if (dt.v == MAG_DTYPE__NUM)
-        dt = deduce_dtype_from_py_scalar(data_h);
+    mag_device_id_t cpu_dvc_id = mag_device(CPU, 0);
+    if (nb::isinstance<nb::int_>(handle) || nb::isinstance<nb::float_>(handle) || nb::isinstance<nb::bool_>(handle)) {
+      if (dtype.v == MAG_DTYPE__NUM)
+        dtype = deduce_dtype_from_py_scalar(handle);
       mag_context_t *ctx = get_ctx();
       mag_tensor_t *raw = nullptr;
-      mag_scalar_t s = scalar_from_py(data_h);
+      mag_scalar_t scalar = scalar_from_py(handle);
       mag_error_t err {};
-      throw_if_error(mag_scalar(&err, &raw, ctx, dt.v, s, cpu_id), err);
+      throw_if_error(mag_scalar(&err, &raw, ctx, dtype.v, scalar, cpu_dvc_id), err);
       maybe_set_requires_grad(ctx, raw, requires_grad);
       on_scope_exit defer_raw([raw] { mag_tensor_decref(raw); });
-      if (!mag_device_id_eq(*device_id, cpu_id)) {
+      if (!mag_device_id_eq(*device_id, cpu_dvc_id)) {
         mag_tensor_t *tmp = nullptr;
         throw_if_error(mag_transfer(&err, &tmp, raw, *device_id), err);
         return tensor_wrapper{tmp};
@@ -109,28 +94,82 @@ namespace mag::bindings {
       mag_tensor_incref(raw);
       return tensor_wrapper{raw};
     }
-    /* Accept NumPy, PyTorch, etc. when CPU and C-contiguous (nanobind may copy if not). */
-    try {
-      auto arr = nb::cast<nb::ndarray<nb::c_contig, nb::device::cpu>>(data_h);
+    try { // Accept NumPy ndarray, PyTorch Tensor, etc. when CPU and C-contiguous (nanobind may copy if not)
+      bool copy = true;
+      if (kwargs.contains("copy"))
+        copy = nb::cast<bool>(kwargs["copy"]);
+      auto arr = nb::cast<nb::ndarray<nb::c_contig, nb::device::cpu>>(handle);
       mag_dtype_t elem_dtype = ndarray_dtype_to_mag_dtype(arr);
       if (elem_dtype == MAG_DTYPE__NUM)
         throw nb::type_error("Tensor() from array: unsupported dtype. Supported: float16, bfloat16, float32, bool, uint8, int8, uint16, int16, uint32, int32, uint64, int64");
-      mag_dtype_t target_dtype = dt.v != MAG_DTYPE__NUM ? dt.v : elem_dtype;
+      mag_dtype_t target_dtype = dtype.v != MAG_DTYPE__NUM ? dtype.v : elem_dtype;
       std::vector<int64_t> shape {};
       shape.reserve(arr.ndim());
       for (size_t i=0; i < arr.ndim(); ++i)
         shape.emplace_back(static_cast<int64_t>(arr.shape(i)));
       mag_context_t *ctx = get_ctx();
-      mag_tensor_t *raw = nullptr;
       mag_error_t err {};
-      if (shape.empty()) throw_if_error(mag_empty_scalar(&err, &raw, ctx, elem_dtype, cpu_id), err);
-      else throw_if_error(mag_empty(&err, &raw, ctx, elem_dtype, static_cast<int64_t>(shape.size()), shape.data(), cpu_id), err);
+      if (!copy) {
+        if (target_dtype != elem_dtype)
+          throw nb::value_error("Tensor(..., copy=False) cannot cast dtype; use copy=True or match the array dtype");
+        bool host_writable = true;
+        if (kwargs.contains("is_writeable"))
+          host_writable = nb::cast<bool>(kwargs["is_writeable"]);
+        Py_INCREF(handle.ptr());
+        mag_tensor_t *borrowed = nullptr;
+        if (shape.empty()) {
+          throw_if_error(
+            mag_borrow_cpu_buffer(
+              &err,
+              &borrowed,
+              ctx,
+              arr.data(),
+              arr.nbytes(),
+              elem_dtype,
+              0,
+              nullptr,
+              host_writable,
+              &mag_bindings_borrow_release,
+              handle.ptr()
+            ),
+            err
+          );
+        } else {
+          throw_if_error(
+            mag_borrow_cpu_buffer(
+              &err,
+              &borrowed,
+              ctx,
+              arr.data(),
+              arr.nbytes(),
+              elem_dtype,
+              static_cast<int64_t>(shape.size()),
+              shape.data(),
+              host_writable,
+              &mag_bindings_borrow_release,
+              handle.ptr()
+            ),
+            err
+          );
+        }
+        maybe_set_requires_grad(ctx, borrowed, requires_grad);
+        on_scope_exit defer_borrowed([borrowed] { mag_tensor_decref(borrowed); });
+        if (!mag_device_id_eq(*device_id, cpu_dvc_id)) {
+          mag_tensor_t *out = nullptr;
+          throw_if_error(mag_transfer(&err, &out, borrowed, *device_id), err);
+          return tensor_wrapper{out};
+        }
+        mag_tensor_incref(borrowed);
+        return tensor_wrapper{borrowed};
+      }
+      mag_tensor_t *raw = nullptr;
+      if (shape.empty()) throw_if_error(mag_empty_scalar(&err, &raw, ctx, elem_dtype, cpu_dvc_id), err);
+      else throw_if_error(mag_empty(&err, &raw, ctx, elem_dtype, static_cast<int64_t>(shape.size()), shape.data(), cpu_dvc_id), err);
       maybe_set_requires_grad(ctx, raw, requires_grad);
       on_scope_exit defer_raw([raw] { mag_tensor_decref(raw); });
       size_t numel = std::accumulate(shape.begin(), shape.end(), static_cast<size_t>(1), std::multiplies<>());
       size_t item_size = mag_type_trait(elem_dtype)->size;
       throw_if_error(mag_copy_raw_(&err, raw, arr.data(), numel * item_size), err);
-
       mag_tensor_t *typed_cpu = nullptr;
       if (target_dtype == elem_dtype) {
         mag_tensor_incref(raw);
@@ -139,8 +178,7 @@ namespace mag::bindings {
         throw_if_error(mag_cast(&err, &typed_cpu, raw, target_dtype), err);
       }
       on_scope_exit defer_typed_cpu([typed_cpu] { mag_tensor_decref(typed_cpu); });
-
-      if (!mag_device_id_eq(*device_id, cpu_id)) {
+      if (!mag_device_id_eq(*device_id, cpu_dvc_id)) {
         mag_tensor_t *out = nullptr;
         throw_if_error(mag_transfer(&err, &out, typed_cpu, *device_id), err);
         return tensor_wrapper{out};
@@ -148,24 +186,24 @@ namespace mag::bindings {
       mag_tensor_incref(typed_cpu);
       return tensor_wrapper{typed_cpu};
     } catch (const nb::cast_error &) {
-      /* Not array-like - fall through to sequence path */
+      // Not array-like - fall through to sequence path
     }
-    if (!nb::isinstance<nb::sequence>(data_h))
+    if (!nb::isinstance<nb::sequence>(handle))
       throw nb::type_error("Tensor() requires scalar, array (NumPy/torch CPU contiguous), or nested sequence");
     std::vector<int64_t> shape {};
     std::vector<nb::handle> stack {};
     std::vector<int64_t> idx_stack {};
     std::vector<nb::handle> flat_h {};
-    nb::handle cur = data_h;
+    nb::handle cur = handle;
     {
       nb::handle tmp = cur;
       while (nb::isinstance<nb::sequence>(tmp) && !nb::isinstance<nb::str>(tmp) && !nb::isinstance<tensor_wrapper>(tmp)) {
-        auto s = nb::cast<nb::sequence>(tmp);
-        size_t n = nb::len(s);
+        auto seq = nb::cast<nb::sequence>(tmp);
+        size_t n = nb::len(seq);
         if (n == 0)
           throw nb::value_error("Tensor() does not support empty lists; use Tensor.empty(shape, ...)");
         shape.emplace_back(static_cast<int64_t>(n));
-        tmp = s[0];
+        tmp = seq[0];
       }
       stack.emplace_back(cur);
       idx_stack.emplace_back(0);
@@ -199,12 +237,12 @@ namespace mag::bindings {
     }
     if (flat_h.empty())
       throw nb::value_error("Tensor(): empty data");
-    if (dt.v == MAG_DTYPE__NUM)
-      dt = deduce_dtype_from_py_scalar(flat_h[0]);
+    if (dtype.v == MAG_DTYPE__NUM)
+      dtype = deduce_dtype_from_py_scalar(flat_h[0]);
     enum class Kind { Float, SInt, UInt, Bool };
     Kind kind {};
     mag_dtype_t wide = MAG_DTYPE_FLOAT32;
-    mag_dtype_mask_t mask = mag_dtype_bit(dt.v);
+    mag_dtype_mask_t mask = mag_dtype_bit(dtype.v);
     if (mask & MAG_DTYPE_MASK_FP) {
       kind = Kind::Float;
       wide = MAG_DTYPE_FLOAT32;
@@ -214,7 +252,7 @@ namespace mag::bindings {
     } else if (mask & MAG_DTYPE_MASK_UINT) {
       kind = Kind::UInt;
       wide = MAG_DTYPE_UINT64;
-    } else if (dt.v == MAG_DTYPE_BOOLEAN) {
+    } else if (dtype.v == MAG_DTYPE_BOOLEAN) {
       kind = Kind::Bool;
       wide = MAG_DTYPE_UINT8;
     } else {
@@ -223,8 +261,8 @@ namespace mag::bindings {
     mag_context_t *ctx = get_ctx();
     mag_tensor_t *raw = nullptr;
     mag_error_t err {};
-    if (shape.empty()) throw_if_error(mag_empty_scalar(&err, &raw, ctx, wide, cpu_id), err);
-    else throw_if_error(mag_empty(&err, &raw, ctx, wide, static_cast<int64_t>(shape.size()), shape.data(), cpu_id), err);
+    if (shape.empty()) throw_if_error(mag_empty_scalar(&err, &raw, ctx, wide, cpu_dvc_id), err);
+    else throw_if_error(mag_empty(&err, &raw, ctx, wide, static_cast<int64_t>(shape.size()), shape.data(), cpu_dvc_id), err);
     maybe_set_requires_grad(ctx, raw, requires_grad);
     on_scope_exit defer_raw([raw] { mag_tensor_decref(raw); });
     size_t n = flat_h.size();
@@ -245,17 +283,15 @@ namespace mag::bindings {
       std::transform(flat_h.begin(), flat_h.end(), buf.begin(), [](const nb::handle &h) { return static_cast<uint8_t>(nb::cast<bool>(h) ? 1 : 0); });
       throw_if_error(mag_copy_raw_(&err, raw, buf.data(), buf.size() * sizeof(uint8_t)), err);
     }
-
     mag_tensor_t *typed_cpu = nullptr;
-    if (wide == dt.v) {
+    if (wide == dtype.v) {
       mag_tensor_incref(raw);
       typed_cpu = raw;
     } else {
-      throw_if_error(mag_cast(&err, &typed_cpu, raw, dt.v), err);
+      throw_if_error(mag_cast(&err, &typed_cpu, raw, dtype.v), err);
     }
     on_scope_exit defer_typed_cpu([typed_cpu] { mag_tensor_decref(typed_cpu); });
-
-    if (!mag_device_id_eq(*device_id, cpu_id)) {
+    if (!mag_device_id_eq(*device_id, cpu_dvc_id)) {
       mag_tensor_t *out = nullptr;
       throw_if_error(mag_transfer(&err, &out, typed_cpu, *device_id), err);
       return tensor_wrapper{out};

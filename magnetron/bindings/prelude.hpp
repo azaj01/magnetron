@@ -20,9 +20,11 @@
 #include <sstream>
 
 #include <magnetron/magnetron.h>
+#include <core/mag_bfloat16.h>
+#include <core/mag_float16.h>
 
-// Nanobind
 #include <nanobind/nanobind.h>
+#include <nanobind/ndarray.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 
@@ -123,4 +125,23 @@ namespace mag::bindings {
     std::string msg = format_error_msg(err);
     throw std::runtime_error {msg.c_str()};
   }
+}
+
+namespace nanobind::detail { // Specialization for magnetron's half precision types
+template <> struct dtype_traits<mag_float16_t> {
+  static constexpr dlpack::dtype value {
+    static_cast<uint8_t>(dlpack::dtype_code::Float),
+    16,
+    1
+  };
+  static constexpr auto name = const_name("float16");
+};
+template <> struct dtype_traits<mag_bfloat16_t> {
+  static constexpr dlpack::dtype value {
+    static_cast<uint8_t>(dlpack::dtype_code::Bfloat),
+    16,
+    1
+  };
+  static constexpr auto name = const_name("bfloat16");
+};
 }
