@@ -25,7 +25,7 @@ static MAG_AINLINE mag_vf32_t mag_vf32_exp(mag_vf32_t x) {
   );
   mag_vf32_t fast = mag_vf32_fmadd(k, j, k);
   if (!mag_vmask32_any(c)) return fast;
-  mag_vi32_t d = mag_vi32_and(mag_vi32_reinterpret_from_vmask32(mag_vf32_cmple(n, mag_vf32_zero())), mag_vi32_splat((int32_t)0x82000000u));
+  mag_vi32_t d = mag_vi32_and(mag_vi32_from_vmask32_bits(mag_vf32_cmple(n, mag_vf32_zero())), mag_vi32_splat((int32_t)0x82000000u));
   mag_vf32_t s1 = mag_vf32_reinterpret_from_vi32(mag_vi32_add(d, mag_vi32_splat((int32_t)0x7f000000u)));
   mag_vf32_t s2 = mag_vf32_reinterpret_from_vi32(mag_vi32_sub(e, d));
   mag_vmask32_t extreme = mag_vf32_cmpgt(mag_vf32_abs(n), mag_vf32_splat(192.0f));
