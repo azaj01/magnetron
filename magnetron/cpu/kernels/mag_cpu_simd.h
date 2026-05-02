@@ -967,7 +967,7 @@ static MAG_AINLINE mag_vmask32_t mag_vi32_cmpeq(mag_vi32_t x, mag_vi32_t y) {
   #elif defined(__SSE2__)
     return _mm_cmpeq_epi32(x, y);
   #else
-    return x==y ? ~0u : 0u;
+    return x == y ? ~0u : 0u;
   #endif
 }
 static MAG_AINLINE mag_vmask32_t mag_vi32_cmpne(mag_vi32_t x, mag_vi32_t y) {
@@ -980,35 +980,10 @@ static MAG_AINLINE mag_vmask32_t mag_vi32_cmpne(mag_vi32_t x, mag_vi32_t y) {
   #elif defined(__SSE2__)
     return _mm_xor_si128(_mm_cmpeq_epi32(x, y), _mm_set1_epi32(-1));
   #else
-    return x!=y ? ~0u : 0u;
+    return x != y ? ~0u : 0u;
   #endif
 }
-static MAG_AINLINE mag_vmask32_t mag_vi32_cmplt(mag_vi32_t x, mag_vi32_t y) {
-  #if (defined(__aarch64__) && defined(__ARM_NEON)) || defined(_M_ARM64)
-    return vcltq_s32(x, y);
-  #elif defined(__AVX512F__)
-    return _mm512_cmp_epi32_mask(x, y, _MM_CMPINT_LT);
-  #elif defined(__AVX2__)
-    return _mm256_cmpgt_epi32(y, x);
-  #elif defined(__SSE2__)
-    return _mm_cmpgt_epi32(y, x);
-  #else
-    return x<y ? ~0u : 0u;
-  #endif
-}
-static MAG_AINLINE mag_vmask32_t mag_vi32_cmple(mag_vi32_t x, mag_vi32_t y) {
-  #if (defined(__aarch64__) && defined(__ARM_NEON)) || defined(_M_ARM64)
-    return vcleq_s32(x, y);
-  #elif defined(__AVX512F__)
-    return _mm512_cmp_epi32_mask(x, y, _MM_CMPINT_LE);
-  #elif defined(__AVX2__)
-    return _mm256_xor_si256(_mm256_cmpgt_epi32(x, y), _mm256_set1_epi32(-1));
-  #elif defined(__SSE2__)
-    return _mm_xor_si128(_mm_cmpgt_epi32(x, y), _mm_set1_epi32(-1));
-  #else
-    return x<=y ? ~0u : 0u;
-  #endif
-}
+
 static MAG_AINLINE mag_vmask32_t mag_vi32_cmpgt(mag_vi32_t x, mag_vi32_t y) {
   #if (defined(__aarch64__) && defined(__ARM_NEON)) || defined(_M_ARM64)
     return vcgtq_s32(x, y);
@@ -1016,12 +991,39 @@ static MAG_AINLINE mag_vmask32_t mag_vi32_cmpgt(mag_vi32_t x, mag_vi32_t y) {
     return _mm512_cmp_epi32_mask(x, y, _MM_CMPINT_GT);
   #elif defined(__AVX2__)
     return _mm256_cmpgt_epi32(x, y);
-  #elif defined(__SSE2__)
+  #elif defined(__SSE4_1__)
     return _mm_cmpgt_epi32(x, y);
+  #elif defined(__SSE2__)
+    mag_alignas(16) int32_t ax[4], ay[4], r[4];
+    _mm_store_si128((__m128i *)ax, x);
+    _mm_store_si128((__m128i *)ay, y);
+    for (int i=0; i < 4; ++i) r[i] = ax[i] > ay[i] ? -1 : 0;
+    return _mm_load_si128((const __m128i *)r);
   #else
-    return x>y ? ~0u : 0u;
+    return x > y ? ~0u : 0u;
   #endif
 }
+
+static MAG_AINLINE mag_vmask32_t mag_vi32_cmplt(mag_vi32_t x, mag_vi32_t y) {
+  #if (defined(__aarch64__) && defined(__ARM_NEON)) || defined(_M_ARM64)
+    return vcltq_s32(x, y);
+  #elif defined(__AVX512F__)
+    return _mm512_cmp_epi32_mask(x, y, _MM_CMPINT_LT);
+  #elif defined(__AVX2__)
+    return _mm256_cmpgt_epi32(y, x);
+  #elif defined(__SSE4_1__)
+    return _mm_cmpgt_epi32(y, x);
+  #elif defined(__SSE2__)
+    mag_alignas(16) int32_t ax[4], ay[4], r[4];
+    _mm_store_si128((__m128i *)ax, x);
+    _mm_store_si128((__m128i *)ay, y);
+    for (int i=0; i < 4; ++i) r[i] = ax[i] < ay[i] ? -1 : 0;
+    return _mm_load_si128((const __m128i *)r);
+  #else
+    return x < y ? ~0u : 0u;
+  #endif
+}
+
 static MAG_AINLINE mag_vmask32_t mag_vi32_cmpge(mag_vi32_t x, mag_vi32_t y) {
   #if (defined(__aarch64__) && defined(__ARM_NEON)) || defined(_M_ARM64)
     return vcgeq_s32(x, y);
@@ -1029,10 +1031,36 @@ static MAG_AINLINE mag_vmask32_t mag_vi32_cmpge(mag_vi32_t x, mag_vi32_t y) {
     return _mm512_cmp_epi32_mask(x, y, _MM_CMPINT_GE);
   #elif defined(__AVX2__)
     return _mm256_xor_si256(_mm256_cmpgt_epi32(y, x), _mm256_set1_epi32(-1));
-  #elif defined(__SSE2__)
+  #elif defined(__SSE4_1__)
     return _mm_xor_si128(_mm_cmpgt_epi32(y, x), _mm_set1_epi32(-1));
+  #elif defined(__SSE2__)
+    mag_alignas(16) int32_t ax[4], ay[4], r[4];
+    _mm_store_si128((__m128i *)ax, x);
+    _mm_store_si128((__m128i *)ay, y);
+    for (int i=0; i < 4; ++i) r[i] = ax[i] >= ay[i] ? -1 : 0;
+    return _mm_load_si128((const __m128i *)r);
   #else
-    return x>=y ? ~0u : 0u;
+    return x >= y ? ~0u : 0u;
+  #endif
+}
+
+static MAG_AINLINE mag_vmask32_t mag_vi32_cmple(mag_vi32_t x, mag_vi32_t y) {
+  #if (defined(__aarch64__) && defined(__ARM_NEON)) || defined(_M_ARM64)
+    return vcleq_s32(x, y);
+  #elif defined(__AVX512F__)
+    return _mm512_cmp_epi32_mask(x, y, _MM_CMPINT_LE);
+  #elif defined(__AVX2__)
+    return _mm256_xor_si256(_mm256_cmpgt_epi32(x, y), _mm256_set1_epi32(-1));
+  #elif defined(__SSE4_1__)
+    return _mm_xor_si128(_mm_cmpgt_epi32(x, y), _mm_set1_epi32(-1));
+  #elif defined(__SSE2__)
+    mag_alignas(16) int32_t ax[4], ay[4], r[4];
+    _mm_store_si128((__m128i *)ax, x);
+    _mm_store_si128((__m128i *)ay, y);
+    for (int i=0; i < 4; ++i) r[i] = ax[i] <= ay[i] ? -1 : 0;
+    return _mm_load_si128((const __m128i *)r);
+  #else
+    return x <= y ? ~0u : 0u;
   #endif
 }
 static MAG_AINLINE mag_vi32_t mag_vi32_blend(mag_vmask32_t m, mag_vi32_t t, mag_vi32_t f) {
@@ -1081,8 +1109,12 @@ static MAG_AINLINE mag_vi32_t mag_vi32_mul(mag_vi32_t x, mag_vi32_t y) {
     return _mm512_mullo_epi32(x, y);
   #elif defined(__AVX2__)
     return _mm256_mullo_epi32(x, y);
-  #elif defined(__SSE2__)
+  #elif defined(__SSE4_1__)
     return _mm_mullo_epi32(x, y);
+  #elif defined(__SSE2__)
+    __m128i prod02 = _mm_mul_epu32(x, y);
+    __m128i prod13 = _mm_mul_epu32(_mm_srli_si128(x, 4), _mm_srli_si128(y, 4));
+    return _mm_unpacklo_epi64(_mm_unpacklo_epi32(prod02, prod13), _mm_unpackhi_epi32(prod02, prod13));
   #else
     return x*y;
   #endif
@@ -1198,8 +1230,14 @@ static MAG_AINLINE mag_vi32_t mag_vi32_min(mag_vi32_t x, mag_vi32_t y) {
     return _mm512_min_epi32(x, y);
   #elif defined(__AVX2__)
     return _mm256_min_epi32(x, y);
-  #elif defined(__SSE2__)
+  #elif defined(__SSE4_1__)
     return _mm_min_epi32(x, y);
+  #elif defined(__SSE2__)
+    mag_alignas(16) int32_t ax[4], ay[4], r[4];
+    _mm_store_si128((__m128i *)ax, x);
+    _mm_store_si128((__m128i *)ay, y);
+    for (int i=0; i < 4; ++i) r[i] = ax[i] < ay[i] ? ax[i] : ay[i];
+    return _mm_load_si128((const __m128i *)r);
   #else
     return x<y ? x : y;
   #endif
@@ -1211,8 +1249,14 @@ static MAG_AINLINE mag_vi32_t mag_vi32_max(mag_vi32_t x, mag_vi32_t y) {
     return _mm512_max_epi32(x, y);
   #elif defined(__AVX2__)
     return _mm256_max_epi32(x, y);
-  #elif defined(__SSE2__)
+  #elif defined(__SSE4_1__)
     return _mm_max_epi32(x, y);
+  #elif defined(__SSE2__)
+    mag_alignas(16) int32_t ax[4], ay[4], r[4];
+    _mm_store_si128((__m128i *)ax, x);
+    _mm_store_si128((__m128i *)ay, y);
+    for (int i=0; i < 4; ++i) r[i] = ax[i] > ay[i] ? ax[i] : ay[i];
+    return _mm_load_si128((const __m128i *)r);
   #else
     return x>y ? x : y;
   #endif
@@ -1228,9 +1272,9 @@ static MAG_AINLINE int32_t mag_vi32_reduce_add(mag_vi32_t x) {
     acc = _mm_hadd_epi32(acc, acc);
     return _mm_cvtsi128_si32(acc);
   #elif defined(__SSE2__)
-      __m128i acc = _mm_add_epi32(x, _mm_srli_si128(x, 8));
-      acc = _mm_add_epi32(acc, _mm_srli_si128(acc, 4));
-      return _mm_cvtsi128_si32(acc);
+    __m128i acc = _mm_add_epi32(x, _mm_srli_si128(x, 8));
+    acc = _mm_add_epi32(acc, _mm_srli_si128(acc, 4));
+    return _mm_cvtsi128_si32(acc);
   #else
     return x;
   #endif
