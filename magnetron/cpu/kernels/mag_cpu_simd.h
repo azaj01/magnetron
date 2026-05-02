@@ -815,7 +815,7 @@ static MAG_AINLINE void mag_vf32_storeu_bf16(mag_bfloat16_t *p, mag_vf32_t v) {
     __m128i h = _mm_packus_epi32(u, u);
     _mm_storel_epi64((__m128i *)p, h);
   #elif defined(__SSE2__)
-    _m128i u = _mm_castps_si128(v);
+    __m128i u = _mm_castps_si128(v);
     u = _mm_srli_epi32(u, 16);
     __m128i a = _mm_shufflelo_epi16(u, _MM_SHUFFLE(2, 0, 2, 0));
     __m128i b = _mm_shufflehi_epi16(u, _MM_SHUFFLE(2, 0, 2, 0));
