@@ -9,8 +9,6 @@
 ** +---------------------------------------------------------------------+
 */
 
-#define MAG_VF32_LANES ((int64_t)(sizeof(mag_vf32_t)/sizeof(float)))
-
 static MAG_AINLINE float mag_fn_add_f32(float x, float y) { return x+y; }
 static MAG_AINLINE float mag_fn_sub_f32(float x, float y) { return x-y; }
 static MAG_AINLINE float mag_fn_mul_f32(float x, float y) { return x*y; }
@@ -279,7 +277,6 @@ mag_gen_cmp_all(ge, >=)
 #undef mag_gen_float_bin_scalar
 #undef mag_gen_bin_simd
 #undef mag_gen_bin_scalar
-#undef MAG_VF32_LANES
 
 #undef mag_fn_add_int
 #undef mag_fn_sub_int

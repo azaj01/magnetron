@@ -295,7 +295,7 @@ static MAG_AINLINE void mag_vf32_storeu_masked(float *p, mag_vf32_t v, int n) {
     vst1q_f32(tmp, v);
     for (int i=0; i < n; ++i) p[i] = tmp[i];
   #elif defined(__AVX512F__)
-    _mm512_mask_store_ps(p, (__mmask16)((1u<<n)-1u), v);
+    _mm512_mask_storeu_ps(p, (__mmask16)((1u<<n)-1u), v);
   #elif defined(__AVX2__)
     mag_alignas(32) float tmp[8];
     _mm256_store_ps(tmp, v);
@@ -944,7 +944,7 @@ static MAG_AINLINE void mag_vi32_storeu_masked(int32_t *p, mag_vi32_t v, int n) 
     vst1q_s32(tmp, v);
     for (int i=0; i < n; ++i) p[i] = tmp[i];
   #elif defined(__AVX512F__)
-    _mm512_mask_store_epi32(p, (__mmask16)((1u<<n)-1u), v);
+    _mm512_mask_storeu_epi32(p, (__mmask16)((1u<<n)-1u), v);
   #elif defined(__AVX2__)
     mag_alignas(32) int32_t tmp[8];
     _mm256_store_si256((__m256i *)tmp, v);
