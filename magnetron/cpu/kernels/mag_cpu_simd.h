@@ -1030,33 +1030,17 @@ static MAG_AINLINE mag_vf32_t mag_vf32_loadu_bf16(const mag_bfloat16_t *p) {
     u = _mm_slli_epi32(u, 16);
     return _mm_castsi128_ps(u);
   #elif defined(__loongarch_asx)
-  uint64_t q0, q1;
-
-  memcpy(&q0, (const char *)p + 0, 8);  // bf16[0..3]
-
-  memcpy(&q1, (const char *)p + 8, 8);  // bf16[4..7]
-
-  __m256i h = __lasx_xvldi(0);
-
-  __asm__ volatile (
-
-    "xvinsgr2vr.d %u[h], %[q0], 0\n\t"  // low 128 lane
-
-    "xvinsgr2vr.d %u[h], %[q1], 2\n\t"  // high 128 lane, NOT 1
-
-    : [h] "+f" (h)
-
-    : [q0] "r" (q0), [q1] "r" (q1)
-
-  );
-
-  __m256i z = __lasx_xvldi(0);
-
-  __m256i u = __lasx_xvilvl_h(z, h);
-
-  u = __lasx_xvslli_w(u, 16);
-
-  return (__m256)u;
+    __m256i h = __lasx_xvldi(0);
+    __asm__ __volatile__(
+      "xvinsgr2vr.d %u[h], %[q0], 0\n"
+      "xvinsgr2vr.d %u[h], %[q1], 2\n"
+      : [h]"+f"(h)
+      : [q0]"r"(*((uint64_t *)p+0)),
+        [q1]"r"(*((uint64_t *)p+1))
+      :
+    );
+  __m256i u = __lasx_xvilvl_h(__lasx_xvldi(0), h);
+  return (__m256)__lasx_xvslli_w(u, 16);
   #elif defined(__loongarch_sx)
     mag_alignas(16) float tmp[4];
     for (int i=0; i < 4; ++i)
@@ -1099,29 +1083,19 @@ static MAG_AINLINE void mag_vf32_storeu_bf16(mag_bfloat16_t *p, mag_vf32_t v) {
     __m128i h = _mm_unpacklo_epi32(a, b);
     _mm_storel_epi64((__m128i *)p, h);
   #elif defined(__loongarch_asx)
-  __m256i u = (__m256i)v;
-
-  u = __lasx_xvsrli_w(u, 16);
-
-  __m256i h = __lasx_xvpickev_h(u, u);
-
-  uint64_t q0, q1;
-
-  __asm__ volatile (
-
-    "xvpickve2gr.d %[q0], %u[h], 0\n\t"
-
-    "xvpickve2gr.d %[q1], %u[h], 2\n\t"
-
-    : [q0] "=r" (q0), [q1] "=r" (q1)
-
-    : [h] "f" (h)
-
-  );
-
-  memcpy((char *)p + 0, &q0, 8);
-
-  memcpy((char *)p + 8, &q1, 8);
+    __m256i u = __lasx_xvsrli_w((__m256i)v, 16);
+    __m256i h = __lasx_xvpickev_h(u, u);
+    uint64_t q0, q1;
+    __asm__ __volatile__(
+      "xvpickve2gr.d %[q0], %u[h], 0\n\t"
+      "xvpickve2gr.d %[q1], %u[h], 2\n\t"
+      : [q0] "=r" (q0),
+        [q1] "=r" (q1)
+      : [h] "f" (h)
+      : 
+    );
+    *((uint64_t *)p+0) = q0;
+    *((uint64_t *)p+1) = q1;
   #elif defined(__loongarch_sx)
     mag_alignas(16) float tmp[4];
     __lsx_vst((__m128i)v, tmp, 0);
