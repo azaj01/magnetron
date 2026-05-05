@@ -1030,33 +1030,21 @@ static MAG_AINLINE mag_vf32_t mag_vf32_loadu_bf16(const mag_bfloat16_t *p) {
     u = _mm_slli_epi32(u, 16);
     return _mm_castsi128_ps(u);
   #elif defined(__loongarch_asx)
-    uint64_t q0, q1;
+  uint64_t lo0, lo1;
 
-    memcpy(&q0, (const char *)p + 0, 8);
+  memcpy(&lo0, (const uint8_t *)p + 0, 8);
 
-    memcpy(&q1, (const char *)p + 8, 8);
+  memcpy(&lo1, (const uint8_t *)p + 8, 8);
 
-    __m256i h = __lasx_xvldi(0);
+  __m256i h = (__m256i){ (long long)lo0, (long long)lo1, 0, 0 };
 
-    __asm__ volatile (
+  __m256i z = __lasx_xvldi(0);
 
-      "xvinsgr2vr.d %u[h], %[q0], 0\n\t"
+  __m256i u = __lasx_xvilvl_h(z, h);   // 8x u16 -> 8x u32
 
-      "xvinsgr2vr.d %u[h], %[q1], 1\n\t"
+  u = __lasx_xvslli_w(u, 16);          // bf16 bits -> fp32 bits
 
-      : [h] "+f" (h)
-
-      : [q0] "r" (q0), [q1] "r" (q1)
-
-    );
-
-    __m256i z = __lasx_xvldi(0);
-
-    __m256i u = __lasx_xvilvl_h(z, h);
-
-    u = __lasx_xvslli_w(u, 16);
-
-    return (__m256)u;
+  return (__m256)u;
   #elif defined(__loongarch_sx)
     mag_alignas(16) float tmp[4];
     for (int i=0; i < 4; ++i)
@@ -1101,23 +1089,23 @@ static MAG_AINLINE void mag_vf32_storeu_bf16(mag_bfloat16_t *p, mag_vf32_t v) {
   #elif defined(__loongarch_asx)
   __m256i u = (__m256i)v;
 
-  u = __lasx_xvsrli_w(u, 16);
+  u = __lasx_xvsrli_w(u, 16);          // fp32 bits -> bf16 in low u16
 
-  __m256i h = __lasx_xvpickev_h(u, u);
+  __m256i h = __lasx_xvpickev_h(u, u); // pack bf16 halfwords
 
-  __asm__ volatile (
+  union {
 
-    "xvstelm.d %u[h], %[p], 0, 0\n\t"
+    __m256i v;
 
-    "xvstelm.d %u[h], %[p], 8, 1\n\t"
+    uint64_t q[4];
 
-    :
+  } out;
 
-    : [h] "f" (h), [p] "r" (p)
+  out.v = h;
 
-    : "memory"
+  memcpy((uint8_t *)p + 0, &out.q[0], 8);
 
-  );
+  memcpy((uint8_t *)p + 8, &out.q[1], 8);
   #elif defined(__loongarch_sx)
     mag_alignas(16) float tmp[4];
     __lsx_vst((__m128i)v, tmp, 0);
