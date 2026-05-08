@@ -19,12 +19,6 @@
 #include "mag_context.h"
 #include "../cpu/mag_cpu.h"
 
-#define mag_snap_verify(expr, action) \
-if (mag_unlikely(!(expr))) { \
-  mag_log_error("Error reading/writing snapshot file: " #expr); \
-  action; \
-}
-
 #define mag_snap_pack4_ne(a,b,c,d) ((((d)&255)<<24)+(((c)&255)<<16)+(((b)&255)<<8)+((a)&255))
 
 #define MAG_SNAP_MAX_STRLEN 0xffff
@@ -88,13 +82,13 @@ typedef struct mag_mem_stream_t {
   mag_mem_stream_flags_t flags;
 } mag_mem_stream_t;
 
-static bool mag_stream_from_mapped_file(mag_mem_stream_t *s, mag_mmap_owner_t *owner, bool write) {
+static mag_status_t mag_stream_from_mapped_file(mag_error_t *err, mag_mem_stream_t *s, mag_mmap_owner_t *owner, bool write) {
   memset(s, 0, sizeof(*s));
-  mag_snap_verify(owner && owner->file.map && owner->file.fs, return false);
+  mag_contract(err, ERR_FAILED_TO_MAP_FILE, {}, owner && owner->file.map && owner->file.fs, "Invalid mmap owner");
   s->base = s->pos = owner->file.map;
   s->end = s->base + owner->file.fs;
-  if (write) s->flags |= MAG_MEM_STREAM_FLAGS_WRITE;
-  return true;
+  if (write) s->flags|=MAG_MEM_STREAM_FLAGS_WRITE;
+  return MAG_STATUS_OK;
 }
 
 static void mag_stream_close(mag_mem_stream_t *stream) {
@@ -102,14 +96,14 @@ static void mag_stream_close(mag_mem_stream_t *stream) {
   memset(stream, 0, sizeof(*stream));
 }
 
-static bool mag_stream_mmap_file_w(mag_mem_stream_t *stream, mag_mapped_file_t *map, const char *path, size_t size) {
+static mag_status_t mag_stream_mmap_file_w(mag_error_t *err, mag_mem_stream_t *stream, mag_mapped_file_t *map, const char *path, size_t size) {
   memset(stream, 0, sizeof(*stream));
-  mag_snap_verify(path != NULL && *path, return false);
-  mag_snap_verify(size > 0, return false);
-  mag_snap_verify(mag_map_file(map, path, size, MAG_MAP_WRITE), return false);
+  mag_contract(err, ERR_FAILED_TO_MAP_FILE, {}, path != NULL && *path, "Invalid mmap path");
+  mag_contract(err, ERR_FAILED_TO_MAP_FILE, {}, size > 0, "Invalid mmap size");
+  mag_contract(err, ERR_FAILED_TO_MAP_FILE, {}, mag_map_file(map, path, size, MAG_MAP_WRITE), "Failed to map file");
   stream->base = stream->pos = map->map;
   stream->end = stream->base + map->fs;
-  stream->flags |= MAG_MEM_STREAM_FLAGS_WRITE;
+  stream->flags|=MAG_MEM_STREAM_FLAGS_WRITE;
   return true;
 }
 
@@ -241,13 +235,13 @@ typedef struct mag_file_header_t {
 } mag_file_header_t;
 
 #define MAG_FILE_HEADER_SIZE (4+4+8+4+4+4+4) /* We don't rely on struct packing */
-mag_static_assert(sizeof(mag_file_header_t) % 4 == 0);
+mag_static_assert(!(sizeof(mag_file_header_t)&3));
 mag_static_assert(sizeof(mag_file_header_t) == MAG_FILE_HEADER_SIZE);
 
 static bool mag_file_header_serialize(const mag_file_header_t *header, mag_mem_stream_t *stream, uint8_t **u32_chk_patch_needle) {
   mag_snap_verify(header->magic == MAG_SNAP_FILE_MAGIC, return false);
   mag_snap_verify(mag_stream_wu32_le(stream, header->magic), return false);
-  mag_snap_verify(header->version == MAG_SNAPSHOT_VERSION, return false); /* Reading older versions is supporting, writing is not */
+  mag_snap_verify(header->version == MAG_SNAPSHOT_VERSION, return false);
   mag_snap_verify(mag_stream_wu32_le(stream, header->version), return false);
   mag_snap_verify(mag_stream_wu64_le(stream, header->timestamp), return false);
   *u32_chk_patch_needle = stream->pos; /* Needle where the checksum is overwritten later */
@@ -262,7 +256,7 @@ static bool mag_file_header_deserialize(mag_file_header_t *header, mag_mem_strea
   mag_snap_verify(mag_stream_ru32_le(stream, &header->magic), return false);
   mag_snap_verify(header->magic == MAG_SNAP_FILE_MAGIC, return false);
   mag_snap_verify(mag_stream_ru32_le(stream, &header->version), return false);
-  mag_snap_verify(header->version <= MAG_SNAPSHOT_VERSION, return false);
+  mag_snap_verify(header->version == MAG_SNAPSHOT_VERSION, return false);
   mag_snap_verify(mag_stream_ru64_le(stream, &header->timestamp), return false);
   mag_snap_verify(mag_stream_ru32_le(stream, &header->checksum), return false);
   mag_snap_verify(mag_stream_ru32_le(stream, &header->aux), return false);
@@ -500,13 +494,14 @@ static size_t mag_snap_compute_size(mag_snapshot_t *snap) {
   return meta+db_pad+mag_snap_compute_tensor_data_size(&snap->tensor_map);
 }
 
-mag_snapshot_t *mag_snapshot_new(mag_context_t *ctx) {
+mag_status_t mag_snapshot_new(mag_snapshot_t **out_snap, mag_context_t *ctx) {
   mag_snapshot_t *snap = (*mag_alloc)(NULL, sizeof(*snap), 0);
   memset(snap, 0, sizeof(*snap));
   snap->ctx = ctx;
   mag_pool_init(&snap->str_pool);
   mag_map_init(&snap->tensor_map, MAG_SNAPSHOT_META_MAP_DEFAULT_CAP, true);
-  return snap;
+  *out_snap = snap;
+  return MAG_STATUS_OK;
 }
 
 void mag_snapshot_free(mag_snapshot_t *snap) {
@@ -535,13 +530,14 @@ static void mag_snapshot_mmap_borrow_release(void *usr) {
   if (usr) mag_rc_decref(usr);
 }
 
-mag_snapshot_t *mag_snapshot_deserialize(mag_context_t *ctx, const char *filename) {
+mag_status_t mag_snapshot_deserialize(mag_snapshot_t **out_snap, mag_context_t *ctx, const char *filename) {
   mag_snap_verify(filename && *filename, return false);
   const char *ext = strrchr(filename, '.'); /* check that the file extension is .mag */
   mag_snap_verify(ext != NULL && strcmp(ext, ".mag") == 0, return false);
 
   mag_tensor_desc_t *stable = NULL;
-  mag_snapshot_t *snap = mag_snapshot_new(ctx);
+  mag_snapshot_t *snap = NULL;
+  mag_try(mag_snapshot_new(&snap, ctx));
   mag_mem_stream_t *stream = &snap->stream;
   snap->mmap_owner = mag_mmap_owner_open(filename);
   mag_snap_verify(snap->mmap_owner != NULL, goto error);
@@ -594,7 +590,7 @@ mag_snapshot_t *mag_snapshot_deserialize(mag_context_t *ctx, const char *filenam
     const mag_tensor_desc_t *desc = stable+i;
     uint64_t delta = desc->offset;
     size_t elsize = mag_type_trait(desc->dtype)->size;
-    int64_t numel = desc->numel;
+    size_t numel = (size_t)desc->numel;
     int64_t shape[MAG_SNAP_MAX_RANK];
     for (uint8_t j=0; j < desc->rank && j < sizeof(shape)/sizeof(*shape); ++j) shape[j] = (int64_t)desc->shape[j];
     size_t nb = numel*elsize;
@@ -738,7 +734,7 @@ bool mag_snapshot_serialize(mag_snapshot_t *snap, const char *filename) {
   mag_unmap_file(&map);
   (*mag_alloc)(stable, 0, 0);
   return true;
-  error:
+error:
   mag_stream_close(&stream);
   mag_unmap_file(&map);
   if (stable) (*mag_alloc)(stable, 0, 0);
