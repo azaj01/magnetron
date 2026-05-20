@@ -31,15 +31,12 @@ class ChatMessage(BaseModel):
 class ChatCompletionRequest(BaseModel):
     model: str
     messages: list[ChatMessage]
-
     stream: bool = False
     max_tokens: int | None = Field(default=None, alias='max_completion_tokens')
     temperature: float | None = None
     top_k: int | None = None
-
     tools: list[dict[str, Any]] | None = None
     tool_choice: Any | None = None
-
     top_p: float | None = None
     stop: Any | None = None
     presence_penalty: float | None = None
@@ -77,7 +74,6 @@ class OpenAIServer:
         authorization: str | None = Header(default=None),
     ) -> Any:
         prompt = self._format_prompt(req.messages, req.tools)
-
         if req.stream:
             return StreamingResponse(
                 self._stream_chat(req, prompt),
@@ -89,23 +85,18 @@ class OpenAIServer:
     def _complete_chat(self, req: ChatCompletionRequest, prompt: str) -> dict[str, Any]:
         completion_id = self._completion_id()
         created = int(time.time())
-
         text = self.engine.gen_one_shot(
             prompt,
             max_tokens=req.max_tokens,
             temp=req.temperature,
             top_k=req.top_k,
         )
-
         tool_calls = self._parse_tool_calls(text) if req.tools else None
-
         message: dict[str, Any] = {
             'role': 'assistant',
             'content': None if tool_calls else text,
         }
-
         finish_reason = 'stop'
-
         if tool_calls:
             message['tool_calls'] = tool_calls
             finish_reason = 'tool_calls'
@@ -132,7 +123,6 @@ class OpenAIServer:
     def _stream_chat(self, req: ChatCompletionRequest, prompt: str):
         completion_id = self._completion_id()
         created = int(time.time())
-
         yield self._sse(
             {
                 'id': completion_id,
@@ -157,7 +147,6 @@ class OpenAIServer:
         ):
             if not chunk:
                 continue
-
             yield self._sse(
                 {
                     'id': completion_id,
@@ -173,7 +162,6 @@ class OpenAIServer:
                     ],
                 }
             )
-
         yield self._sse(
             {
                 'id': completion_id,
@@ -189,7 +177,6 @@ class OpenAIServer:
                 ],
             }
         )
-
         yield 'data: [DONE]\n\n'
 
     def _format_prompt(
@@ -198,37 +185,28 @@ class OpenAIServer:
         tools: list[dict[str, Any]] | None,
     ) -> str:
         parts: list[str] = []
-
         system_seen = False
-
         for msg in messages:
             if msg.role == 'system':
                 system_seen = True
                 parts.append(f'<|im_start|>system\n{msg.content or ""}{self._render_tools(tools)}<|im_end|>')
-
             elif msg.role == 'user':
                 parts.append(f'<|im_start|>user\n{msg.content or ""}<|im_end|>')
-
             elif msg.role == 'assistant':
                 content = msg.content or ''
-
                 if msg.tool_calls:
                     content = json.dumps(
                         {'tool_calls': msg.tool_calls},
                         ensure_ascii=False,
                     )
-
                 parts.append(f'<|im_start|>assistant\n{content}<|im_end|>')
-
             elif msg.role == 'tool':
                 parts.append(f'<|im_start|>tool name={msg.name or ""} tool_call_id={msg.tool_call_id or ""}\n{msg.content or ""}<|im_end|>')
-
         if not system_seen and tools:
             parts.insert(
                 0,
                 f'<|im_start|>system\nYou are a helpful assistant.{self._render_tools(tools)}<|im_end|>',
             )
-
         parts.append('<|im_start|>assistant\n')
         return '\n'.join(parts)
 

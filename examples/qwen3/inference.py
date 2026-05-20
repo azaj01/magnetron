@@ -50,7 +50,6 @@ class InferenceConfig:
     system: str = 'You are a helpful assistant.'
     device: str = 'cuda'
     max_ctx: int = 4096
-    reserve_gen: int = 1024
     max_tokens: int = 1024
     temp: float = 0.6
     top_k: int = 200
@@ -63,7 +62,6 @@ class InferenceConfig:
             system=args.system,
             device=args.device,
             max_ctx=args.max_ctx,
-            reserve_gen=args.reserve_gen,
             max_tokens=args.max_tokens,
             temp=args.temp,
             top_k=args.top_k,
