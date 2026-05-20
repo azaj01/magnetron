@@ -18,15 +18,15 @@
 #include <ctype.h>
 
 typedef struct mag_backend_module_t {
-  mag_dylib_t* handle;
-  mag_backend_t* backend;
+  mag_dylib_t *handle;
+  mag_backend_t *backend;
   size_t fname_hash; /* Hash of the filename to identify the module */
   MAG_BACKEND_SYM_FN_ABI_COOKIE *fn_abi_cookie;
   MAG_BACKEND_SYM_FN_INIT *fn_init;
   MAG_BACKEND_SYM_FN_SHUTDOWN *fn_shutdown;
 } mag_backend_module_t;
 
-static bool mag_backend_module_dlym(mag_dylib_t* handle, const char *sym, const char *fname, void **fn) {
+static bool mag_backend_module_dlym(mag_dylib_t *handle, const char *sym, const char *fname, void **fn) {
   *fn = mag_dylib_sym(handle, sym);
   if (mag_unlikely(!*fn)) {
     mag_log_error("Failed to find symbol '%s' in backend library file: %s", sym, fname);
@@ -39,7 +39,7 @@ static bool mag_backend_module_dlym(mag_dylib_t* handle, const char *sym, const 
 static mag_backend_module_t *mag_backend_module_load(const char *file, mag_context_t *ctx) {
   mag_log_info("Loading backend module: '%s'", file);
   mag_assert(mag_utf8_validate((const uint8_t *)file, strlen(file)), "Path is not valid UTF-8");
-  mag_dylib_t* handle = mag_dylib_open(file); /* Open the dynamic library */
+  mag_dylib_t *handle = mag_dylib_open(file); /* Open the dynamic library */
   if (mag_unlikely(!handle)) {
     return NULL;
   }
