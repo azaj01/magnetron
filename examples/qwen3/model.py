@@ -49,23 +49,11 @@ class MLP(nn.Module):
         return self.down_proj(self.gate_proj(x).silu() * self.up_proj(x))
 
 
-def _repeat_kv(x: Tensor, n_rep: int) -> Tensor:
-    if n_rep == 1:
-        return x
-    B, n_kv, T, D = x.shape
-    chunks: list[Tensor] = []
-    for h in range(n_kv):  # TODO: repeat
-        xh: Tensor = x[:, h : h + 1, :, :]
-        for _ in range(n_rep):
-            chunks.append(xh)
-    return Tensor.cat(chunks, dim=1)
-
-
 def _precompute_freq_cache(dim: int, theta: float, max_seq_len: int) -> tuple[Tensor, Tensor]:
     inv_freq = (theta ** -(Tensor.arange(0, dim, 2, dtype=dtype.float32) / dim)).reshape(1, -1)
     freqs = Tensor.arange(stop=max_seq_len, dtype=dtype.float32).reshape(max_seq_len, 1) * inv_freq
-    cos_half = Tensor.cos(freqs)
-    sin_half = Tensor.sin(freqs)
+    cos_half = freqs.cos()
+    sin_half = freqs.sin()
     cos = Tensor.cat([cos_half, cos_half], dim=-1).cast(dtype.bfloat16)
     sin = Tensor.cat([sin_half, sin_half], dim=-1).cast(dtype.bfloat16)
     return cos, sin
@@ -86,6 +74,18 @@ def _apply_rope(q: Tensor, k: Tensor, freq_cos: Tensor, freq_sin: Tensor, idx: T
     q_embed: Tensor = (q * cos) + (_rot_half(q) * sin)
     k_embed: Tensor = (k * cos) + (_rot_half(k) * sin)
     return q_embed, k_embed
+
+
+def _repeat_kv(x: Tensor, n_rep: int) -> Tensor:
+    if n_rep == 1:
+        return x
+    B, n_kv, T, D = x.shape
+    chunks: list[Tensor] = []
+    for h in range(n_kv):  # TODO: repeat
+        xh: Tensor = x[:, h : h + 1, :, :]
+        for _ in range(n_rep):
+            chunks.append(xh)
+    return Tensor.cat(chunks, dim=1)
 
 
 class SlidingWindowAttention(nn.Module):
@@ -224,9 +224,9 @@ class Qwen3Model(nn.Module):
         concated: str = ''
         for _ in range(max_tokens):
             logits_1d: Tensor = next_logits.reshape(-1)
-            #top_vals, top_idx = logits_1d.topk(top_k, dim=0, largest=True, sorted=False)
-            #pick: Tensor = top_vals.softmax(dim=-1).reshape(1, -1).multinomial(num_samples=1)
-            #tok_id: int = int(top_idx[pick[0, 0]].item())
+            # top_vals, top_idx = logits_1d.topk(top_k, dim=0, largest=True, sorted=False)
+            # pick: Tensor = top_vals.softmax(dim=-1).reshape(1, -1).multinomial(num_samples=1)
+            # tok_id: int = int(top_idx[pick[0, 0]].item())
             tok_id = int(logits_1d.argmax(dim=0).item())
             if tok_id == self.config.eos_token_id or tok_id in _EOS:
                 return

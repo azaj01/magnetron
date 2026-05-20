@@ -8,18 +8,15 @@
 # +---------------------------------------------------------------------+
 
 import argparse
-import asyncio
 import gc
 import time
+
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
-
-from magnetron import Tensor, context
+from magnetron import Tensor, context, dtype
 from rich.console import Console
 from tokenizers import Tokenizer
-from torch.utils.data.datapipes.utils import snapshot
-
-from model import build_prompt, Qwen3Model, dtype
+from model import Qwen3Model
 
 console = Console()
 REPO_ID: str = 'mario-sieg/qwen3.0-4b-2507-instruct-magnetron'
@@ -48,34 +45,10 @@ class HFTokenizer:
         return self.tok.decode(tok_id)
 
 
-def clamp_history_by_tokens(
-    tokenizer: HFTokenizer,
-    system: str,
-    history: list[tuple[str, str]],
-    max_ctx: int,
-    reserve_gen: int,
-) -> list[tuple[str, str]]:
-    budget = max(256, max_ctx - reserve_gen)
-    prompt = build_prompt(system, history)
-    n = len(tokenizer.encode(prompt))
-    if n <= budget:
-        return history
-    trimmed = history[:]
-    while trimmed:
-        trimmed.pop(0)
-        if trimmed and trimmed[0][0] == 'assistant':
-            trimmed.pop(0)
-        prompt = build_prompt(system, trimmed)
-        n = len(tokenizer.encode(prompt))
-        if n <= budget:
-            return trimmed
-    return []
-
-
 @dataclass
 class InferenceConfig:
     system: str = 'You are a helpful assistant.'
-    device: str = 'cpu'
+    device: str = 'cuda'
     max_ctx: int = 4096
     reserve_gen: int = 1024
     max_tokens: int = 1024
@@ -95,7 +68,7 @@ class InferenceConfig:
             temp=args.temp,
             top_k=args.top_k,
             seed=args.seed,
-            snapshot=args.snapshot
+            snapshot=args.snapshot,
         )
 
 
@@ -121,61 +94,30 @@ class InferenceEngine:
         console.print(f'Ready in {end - start:.2f}s', style='dim')
         gc.collect()
 
-    def stream_chat(
-        self,
-        history: list[tuple[str, str]],
-        system_override: str | None = None,
-        mode: str | None = None,
-    ) -> Iterator[str]:
-        c = self.config
-        system = (system_override or c.system).strip() or c.system
-        max_tokens = c.max_tokens
-        temp = c.temp
-        if mode == 'proactive':
-            max_tokens = min(80, c.max_tokens)
-            temp = 0.8
-        yield from self._stream_chat_impl(history, system, max_tokens=max_tokens, temp=temp)
-
-    def _stream_chat_impl(
-        self,
-        history: list[tuple[str, str]],
-        system: str,
-        max_tokens: int,
-        temp: float,
-    ) -> Iterator[str]:
-        c = self.config
-        history = clamp_history_by_tokens(self.tokenizer, system, history, max_ctx=c.max_ctx, reserve_gen=c.reserve_gen)
-        prompt = build_prompt(system, history)
+    def gen_stream(self, prompt: str, max_tokens: int | None = None, temp: float | None = None, top_k: int | None = None) -> Iterator[str]:
+        if max_tokens is None:
+            max_tokens = self.config.max_tokens
+        if temp is None:
+            temp = self.config.temp
+        if top_k is None:
+            top_k = self.config.top_k
         model_input_ids = Tensor([self.tokenizer.encode(prompt)], dtype=dtype.int64)
-        for chunk in self.model.generate_stream(model_input_ids, self.tokenizer, max_tokens=max_tokens, temp=temp, top_k=c.top_k):
+        for chunk in self.model.generate_stream(model_input_ids, self.tokenizer, max_tokens=max_tokens, temp=temp, top_k=top_k):
             yield chunk
         gc.collect()
 
-    async def async_stream_chat(
-        self,
-        history: list[tuple[str, str]],
-        system_override: str | None = None,
-        mode: str | None = None,
+    async def gen_stream_async(
+        self, prompt: str, max_tokens: int | None = None, temp: float | None = None, top_k: int | None = None
     ) -> AsyncIterator[str]:
-        c = self.config
-        system = (system_override or c.system).strip() or c.system
-        max_tokens = c.max_tokens
-        temp = c.temp
-        if mode == 'proactive':
-            max_tokens = min(80, c.max_tokens)
-            temp = 0.8
-        for chunk in self._stream_chat_impl(history, system, max_tokens=max_tokens, temp=temp):
+        import asyncio
+
+        for chunk in self.gen_stream(prompt, max_tokens, temp, top_k):
             yield chunk
             await asyncio.sleep(0)
 
-    def one_shot_answer(self, prompt: str) -> str:
-        prompt = build_prompt(self.config.system, [('user', prompt)])
-        model_input_ids = Tensor([self.tokenizer.encode(prompt)], dtype=dtype.int64)
-        gc.collect()
-        reply_parts: list[str] = []
-        c = self.config
-        for chunk in self.model.generate_stream(model_input_ids, self.tokenizer, max_tokens=c.max_tokens, temp=c.temp, top_k=c.top_k):
-            reply_parts.append(chunk)
-        reply = ''.join(reply_parts)
-        gc.collect()
+    def gen_one_shot(self, prompt: str, max_tokens: int | None = None, temp: float | None = None, top_k: int | None = None) -> str:
+        parts: list[str] = []
+        for chunk in self.gen_stream(prompt, max_tokens, temp, top_k):
+            parts.append(chunk)
+        reply: str = ''.join(parts)
         return reply

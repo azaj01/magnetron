@@ -472,8 +472,6 @@ extern MAG_EXPORT void mag_tensor_visualize_backprop_graph(mag_tensor_t *tensor,
 
 typedef struct mag_snapshot_t mag_snapshot_t;
 
-/* TODO: Migrate to new error system */
-
 extern MAG_EXPORT mag_status_t mag_snapshot_new(mag_error_t *err, mag_snapshot_t **out_snap, mag_context_t *ctx);
 extern MAG_EXPORT mag_status_t mag_snapshot_deserialize(mag_error_t *err, mag_snapshot_t **out_snap, mag_context_t *ctx, const char *filename);
 extern MAG_EXPORT mag_status_t mag_snapshot_serialize(mag_error_t *err, mag_snapshot_t *snap, const char *filename);
