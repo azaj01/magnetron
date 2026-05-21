@@ -165,10 +165,14 @@ class SlidingWindowAttention(nn.Module):
         scores: Tensor = (q @ k.transpose(2, 3)) * (1.0 / math.sqrt(self.head_dim))
         q_len: int = q.shape[2]
         k_len: int = k.shape[2]
-        k_pos_indices: Tensor = Tensor.arange(k_len).reshape(1, -1)
-        q_pos_indices: Tensor = Tensor.arange(start=(k_len - q_len), stop=k_len).reshape(-1, 1)
-        additive_mask = Tensor.where(k_pos_indices <= q_pos_indices, 0.0, -1e4).cast(scores.dtype).reshape(1, 1, q_len, k_len)
-        return self.o_proj(((scores + additive_mask).softmax(dim=-1) @ v).transpose(1, 2).reshape(B, T, -1))
+        if q_len == 1:
+            attn = scores.softmax(dim=-1)
+        else:
+            k_pos_indices: Tensor = Tensor.arange(k_len).reshape(1, -1)
+            q_pos_indices: Tensor = Tensor.arange(start=(k_len - q_len), stop=k_len).reshape(-1, 1)
+            mask = Tensor.where(k_pos_indices <= q_pos_indices, 0.0, -1e4).cast(scores.dtype).reshape(1, 1, q_len, k_len)
+            attn = (scores + mask).softmax(dim=-1)
+        return self.o_proj((attn @ v).transpose(1, 2).reshape(B, T, -1))
 
 
 class Block(nn.Module):
@@ -247,15 +251,6 @@ class Qwen3Model(nn.Module):
         temp: float = 1.0,
         top_k: int = 10,
     ) -> Iterator[str]:
-        self.cache.clear()
-
-        idx = idx.reshape(1, -1)
-        in_len: int = idx.shape[1]
-        logits = self(idx, idx=Tensor.arange(stop=in_len).reshape(1, -1))
-        next_logits: Tensor = logits[:, -1, :] / temp
-        curr_len: int = in_len
-        gen_ids: list[int] = []
-        concated: str = ''
 
         def sample(logits: Tensor, strategy: SamplingStrategy) -> int:  # Sample according to strategy
             match strategy:
@@ -267,17 +262,24 @@ class Qwen3Model(nn.Module):
                 case _:
                     raise RuntimeError(f'Invalid sampling strategy: {strategy}')
 
+        self.cache.clear()
+
+        idx = idx.reshape(1, -1)
+        in_len: int = idx.shape[1]
+        logits = self(idx, idx=Tensor.arange(stop=in_len).reshape(1, -1))
+        next_logits: Tensor = logits[:, -1, :] / temp
+        curr_len: int = in_len
+        pending: list[int] = []
+
         for _ in range(max_tokens):
             tok_id: int = sample(next_logits.reshape(-1), self.config.sampling_strategy)
             if tok_id == self.config.eos_token_id or tok_id in _EOS:
                 return
-            gen_ids.append(tok_id)
-            text: str = tokenizer.decode(gen_ids)
-            if len(text) > len(concated):
-                delta = text[len(concated) :]
-                delta = delta.replace('\ufffd', '')
-                concated = text
+            pending.append(tok_id)
+            delta: str = tokenizer.decode(pending)
+            if delta and '\ufffd' not in delta:
                 yield delta
+                pending.clear()
             input_ids = Tensor([tok_id], dtype=dtype.int64).reshape(1, 1)
             logits = self(input_ids, idx=Tensor([curr_len], dtype=dtype.int64).reshape(1, 1))
             next_logits = logits[:, -1, :] / temp
