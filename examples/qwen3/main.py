@@ -100,7 +100,7 @@ def _main() -> None:
     if args.repl:
         repl(engine)
     else:
-        reply = engine.one_shot_answer(args.prompt)
+        reply = engine.gen_one_shot(args.prompt)
         console.print(f'\n\nAnswer: {reply}', style='bold green')
 
 

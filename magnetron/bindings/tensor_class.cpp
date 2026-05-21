@@ -284,8 +284,8 @@ namespace mag::bindings {
       nb::object result {};
       switch (casted_type) {
         case CastedTypeFamily::F64: result = build_list_recursive<float, nb::float_>(static_cast<const float *>(ptr), shape, strides.data(), rank, 0, 0); break;
-        case CastedTypeFamily::I64: result = build_list_recursive<int64_t, nb::int_>( static_cast<const int64_t *>(ptr), shape, strides.data(), rank, 0, 0); break;
-        case CastedTypeFamily::U64: result = build_list_recursive<uint64_t, nb::int_>( static_cast<const uint64_t *>(ptr), shape, strides.data(), rank, 0, 0); break;
+        case CastedTypeFamily::I64: result = build_list_recursive<int64_t, nb::int_>(static_cast<const int64_t *>(ptr), shape, strides.data(), rank, 0, 0); break;
+        case CastedTypeFamily::U64: result = build_list_recursive<uint64_t, nb::int_>(static_cast<const uint64_t *>(ptr), shape, strides.data(), rank, 0, 0); break;
         case CastedTypeFamily::Bool: result = build_list_recursive<uint8_t, nb::bool_>(static_cast<const uint8_t *>(ptr), shape, strides.data(), rank, 0, 0); break;
         default: throw nb::value_error("Unsupported dtype for tolist()");
       }

@@ -198,6 +198,12 @@ namespace mag::bindings {
       throw_if_error(mag_clone(&err, &out, *self), err);
       return tensor_wrapper{out};
     }, "Return a copy with the same data and dtype.")
+    .def("copy_", [](tensor_wrapper &self, const tensor_wrapper &src) -> tensor_wrapper& {
+      std::lock_guard lock {get_global_mutex()};
+      mag_error_t err {};
+      throw_if_error(mag_copy_(&err, *self, *src), err);
+      return self;
+    }, "src"_a, "Copy data from src into this tensor in-place.")
     .def("cast", [](const tensor_wrapper &self, dtype_wrapper dt) -> tensor_wrapper {
       std::lock_guard lock {get_global_mutex()};
       mag_tensor_t *out = nullptr;

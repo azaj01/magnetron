@@ -1460,6 +1460,23 @@ mag_status_t mag_gather(mag_error_t *err, mag_tensor_t **out_result, mag_tensor_
   return MAG_STATUS_OK;
 }
 
+mag_status_t mag_copy_(mag_error_t *err, mag_tensor_t *dst, mag_tensor_t *src) {
+  mag_contract(err, ERR_INVALID_PARAM, {}, dst && src, "Source and destination tensors must not be NULL.");
+  mag_contract(err, ERR_INVALID_PARAM, {}, mag_tensor_is_shape_eq(dst, src), "Source and destination tensors must have the same shape.");
+  mag_contract(
+    err,
+    ERR_INVALID_PARAM,
+    {},
+    dst->dtype == src->dtype,
+    "Source and destination tensors must have the same dtype; got %s and %s.",
+    mag_type_trait(dst->dtype)->name,
+    mag_type_trait(src->dtype)->name
+  );
+  mag_try(mag_check_dtype_and_device_compat(err, MAG_OP_CLONE, (mag_tensor_t *[2]){src, dst}, 2));
+  mag_try(mag_dispatch(err, MAG_OP_CLONE, true, NULL, &src, 1, &dst, 1));
+  return MAG_STATUS_OK;
+}
+
 mag_status_t mag_copy_raw_(mag_error_t *err, mag_tensor_t *tensor, const void *data, size_t size_bytes) {
   mag_contract(err, ERR_INVALID_PARAM, {}, data != NULL && size_bytes > 0, "Invalid data pointer or length.");
   mag_contract(err, ERR_INVALID_PARAM, {}, tensor->storage->device->id.type == MAG_BACKEND_TYPE_CPU, "Tensor storage must be allocated on CPU; got %s.", mag_backend_type_to_str(tensor->storage->device->id.type));
