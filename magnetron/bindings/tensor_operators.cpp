@@ -604,6 +604,17 @@ namespace mag::bindings {
       },
       "num_classes"_a,
       "One-hot encode integer indices. Returns shape (..., num_classes)."
+    )
+    .def("gather",
+      [](const tensor_wrapper &self, int64_t dim, const tensor_wrapper &index) -> tensor_wrapper {
+        std::lock_guard lock {get_global_mutex()};
+        mag_tensor_t *out = nullptr;
+        mag_error_t err {};
+        throw_if_error(mag_gather(&err, &out, *self, dim, *index), err);
+        return tensor_wrapper{out};
+      },
+      "dim"_a = 0,
+      "index"_a
     );
 
     cls.attr("cat") = nb::cpp_function(

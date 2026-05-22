@@ -1423,6 +1423,7 @@ mag_status_t mag_gather(mag_error_t *err, mag_tensor_t **out_result, mag_tensor_
   mag_contract(err, ERR_INVALID_PARAM, {}, idx->dtype == MAG_DTYPE_INT64, "Index tensor must be of type int64.");
   mag_contract(err, ERR_INVALID_PARAM, {}, dim >= 0 && dim < tensor->coords.rank, "Gather dimension must be in [0, %" PRIi64 "); got %" PRIi64, tensor->coords.rank, dim);
   mag_contract(err, ERR_INVALID_PARAM, {}, idx->coords.rank <= tensor->coords.rank, "Index tensor rank must be <= input tensor rank (%" PRIi64 " <= %" PRIi64 ").", idx->coords.rank, tensor->coords.rank);
+  mag_contract(err, ERR_INVALID_PARAM, {}, idx->coords.rank >= 1, "Index tensor must have rank >= 1.");
   mag_norm_axis(&dim, tensor->coords.rank);
   mag_assert2(dim >= 0 && dim < tensor->coords.rank);
   int64_t ax[MAG_MAX_DIMS];

@@ -17,23 +17,29 @@
     const int64_t n = payload->cmd->num_in; \
     mag_assert2(r && n > 0); \
     mag_assert2(dim >= 0 && dim < r->coords.rank); \
+    \
     int64_t R = r->coords.rank; \
     T *br = (T *)mag_tensor_data_ptr_mut(r); \
+    mag_assert2(mag_tensor_is_contiguous(r)); \
+    \
     int64_t inner_block = 1; \
     for (int64_t d = dim+1; d < R; ++d) inner_block *= r->coords.shape[d]; \
     int64_t outer_count = 1; \
     for (int64_t d=0; d < dim; ++d) outer_count *= r->coords.shape[d]; \
+    \
     int64_t mult[MAG_MAX_DIMS]; \
     for (int64_t d = 0; d < dim; ++d) { \
       int64_t m = 1; \
       for (int64_t k = d + 1; k < dim; ++k) m *= r->coords.shape[k]; \
       mult[d] = m; \
     } \
+    \
     int64_t tc = payload->thread_num; \
     int64_t ti = payload->thread_idx; \
     int64_t chunk = (outer_count + tc - 1)/tc; \
     int64_t oa = ti*chunk; \
     int64_t ob = mag_xmin(oa + chunk, outer_count); \
+    \
     for (int64_t p=oa; p < ob; ++p) { \
       int64_t idx_prefix[MAG_MAX_DIMS]; \
       int64_t rtmp = p; \
@@ -42,9 +48,11 @@
         if (mult[d] != 0) rtmp = rtmp%mult[d]; \
         idx_prefix[d] = q; \
       } \
+      \
       int64_t moff = 0; \
       for (int64_t d=0; d < dim; ++d) moff += idx_prefix[d]*r->coords.strides[d]; \
       int64_t cur = 0; \
+      \
       for (int64_t i=0; i < n; ++i) { \
         const mag_tensor_t *x = mag_cmd_in(i); \
         int64_t smoff=0; \
@@ -112,39 +120,102 @@ mag_gen_stub_repeat_back(mag_bfloat16_t, bfloat16, MAG_BFLOAT16_ZERO, mag_bfloat
 
 #undef mag_gen_stub_repeat_back
 
+static inline bool mag_coords_is_contig_dense(const mag_coords_t *c) {
+  int64_t s = 1;
+  for (int64_t dim = c->rank - 1; dim >= 0; --dim) {
+    if (c->strides[dim] != s) return false;
+    s *= c->shape[dim];
+  }
+  return true;
+}
+
 #define mag_gen_stub_gather(T, TF) \
-  static MAG_HOTPROC mag_status_t mag_gather_##TF(mag_error_t *err,const mag_kernel_payload_t *payload) { \
-    (void)err; \
+  static MAG_HOTPROC mag_status_t mag_gather_##TF(mag_error_t *err, const mag_kernel_payload_t *payload) { \
     mag_tensor_t *r = mag_cmd_out(0); \
     const mag_tensor_t *src = mag_cmd_in(0); \
     const mag_tensor_t *index = mag_cmd_in(1); \
-    mag_assert2(index->dtype == MAG_DTYPE_INT64); \
     T *br = (T *)mag_tensor_data_ptr_mut(r); \
     const T *bx = (const T *)mag_tensor_data_ptr(src); \
     const int64_t *bi = (const int64_t *)mag_tensor_data_ptr(index); \
     int64_t axis = mag_op_attr_unwrap_int64(mag_cmd_attr(0)); \
     if (axis < 0) axis += src->coords.rank; \
-    mag_assert2(axis >= 0 && axis < src->coords.rank); \
-    mag_assert2(index->coords.rank >= 1); \
     int64_t ax = src->coords.shape[axis]; \
-    int64_t on = r->numel; \
+    int64_t total = r->numel; \
+    int64_t tc = payload->thread_num; \
+    int64_t ti = payload->thread_idx; \
+    int64_t chunk = (total + tc - 1)/tc; \
+    int64_t ra = ti*chunk; \
+    int64_t rb = mag_xmin(ra + chunk, total); \
+    if (mag_unlikely(rb <= ra)) return MAG_STATUS_OK; \
+    bool src_contig = mag_tensor_is_contiguous(src); \
+    bool r_contig = mag_tensor_is_contiguous(r); \
+    bool i_contig = mag_tensor_is_contiguous(index); \
+    int64_t inner=1; \
+    for (int64_t dim=axis+1; dim < src->coords.rank; ++dim) \
+      inner*=src->coords.shape[dim]; \
+    int64_t outer=1; \
+    for (int64_t dim=0; dim < axis; ++dim) \
+      outer*=src->coords.shape[dim]; \
+    bool full_index = index->coords.rank == r->coords.rank && index->numel == r->numel; \
+    if (mag_likely(src_contig && r_contig && i_contig && full_index)) { \
+      int64_t out_ax = r->coords.shape[axis]; \
+      for (int64_t flat=ra; flat < rb; ++flat) { \
+        int64_t g = bi[flat]; \
+        if (g < 0) g += ax; \
+        mag_contract(err, ERR_KERNEL_FAILURE, {}, g >= 0 && g < ax, "Invalid gather axis, g must be within [0, %" PRIi64 ")", ax); \
+        int64_t k = flat%inner; \
+        int64_t t = flat/inner; \
+        int64_t o = t/out_ax; \
+        br[flat] = bx[o*ax*inner + g*inner + k]; \
+      } \
+      return MAG_STATUS_OK; \
+    } \
+    if (mag_likely(src_contig && r_contig && i_contig && index->coords.rank == 1)) { \
+      int64_t idx_len = index->coords.shape[0]; \
+      mag_contract(err, ERR_KERNEL_FAILURE, {}, r->coords.shape[axis] == idx_len, "Invalid shape permutation length. %" PRIi64 " != %" PRIi64, r->coords.shape[axis], idx_len); \
+      int64_t block = inner; \
+      int64_t groups = outer*idx_len; \
+      int64_t gra = ra/block; \
+      int64_t grb = (rb + block - 1)/block; \
+      for (int64_t group=gra; group < grb && group < groups; ++group) { \
+        int64_t o = group/idx_len; \
+        int64_t j = group%idx_len; \
+        int64_t g = bi[j]; \
+        if (g < 0) g += ax; \
+        mag_contract(err, ERR_KERNEL_FAILURE, {}, g >= 0 && g < ax, "Invalid gather axis: %" PRIi64 " must be within [0, %" PRIi64 ")", g, ax); \
+        int64_t dst_base = (o*idx_len + j)*inner; \
+        int64_t src_base = (o*ax + g)*inner; \
+        int64_t a = 0; \
+        int64_t b = inner; \
+        if (group == gra) a = ra - dst_base; \
+        if (group == grb-1) b = rb - dst_base; \
+        a = mag_xmax(a, 0); \
+        b = mag_xmin(b, inner); \
+        if (mag_likely(b > a)) \
+          memcpy(br+dst_base+a, bx+src_base+a, (size_t)(b-a)*sizeof(T)); \
+      } \
+      return MAG_STATUS_OK; \
+    } \
     int64_t oc[MAG_MAX_DIMS]; \
     int64_t sc[MAG_MAX_DIMS]; \
     bool full = true; \
-    for (int64_t d = 0; d < src->coords.rank; ++d) { \
-      if (d == axis) continue; \
-      if (index->coords.shape[d] != src->coords.shape[d]) { \
-        full = false; \
-        break; \
+    if (index->coords.rank != src->coords.rank) full = false; \
+    else { \
+      for (int64_t dim=0; dim < src->coords.rank; ++dim) { \
+        if (dim == axis) continue; \
+        if (index->coords.shape[dim] != src->coords.shape[dim]) { \
+          full = false; \
+          break; \
+        } \
       } \
     } \
     mag_coords_iter_t ci; \
     mag_coords_iter_init(&ci, &index->coords); \
-    for (int64_t flat=0; flat < on; ++flat) { \
+    for (int64_t flat = ra; flat < rb; ++flat) { \
       int64_t tmp = flat; \
-      for (int64_t d=r->coords.rank-1; d >= 0; --d) { \
-        oc[d] = tmp % r->coords.shape[d]; \
-        tmp /= r->coords.shape[d]; \
+      for (int64_t dim = r->coords.rank - 1; dim >= 0; --dim) { \
+        oc[dim] = tmp % r->coords.shape[dim]; \
+        tmp /= r->coords.shape[dim]; \
       } \
       int64_t gather_idx; \
       if (full) { \
@@ -152,35 +223,32 @@ mag_gen_stub_repeat_back(mag_bfloat16_t, bfloat16, MAG_BFLOAT16_ZERO, mag_bfloat
         gather_idx = bi[index_offset]; \
       } else if (index->coords.rank == 1) { \
         int64_t idx_pos = oc[axis]; \
-        mag_assert2(idx_pos >= 0 && idx_pos < index->coords.shape[0]); \
-        int64_t index_offset = idx_pos*index->coords.strides[0]; \
-        gather_idx = bi[index_offset]; \
+        mag_contract(err, ERR_KERNEL_FAILURE, {}, idx_pos >= 0 && idx_pos < index->coords.shape[0], "Index position: %" PRIi64 " must be within [0, %" PRIi64 ")", idx_pos, index->coords.shape[0]); \
+        gather_idx = bi[idx_pos * index->coords.strides[0]]; \
       } else { \
-        int64_t idx_coords[MAG_MAX_DIMS]; \
-        for (int64_t i=0; i < index->coords.rank; ++i) idx_coords[i] = oc[axis+i]; \
         int64_t index_offset = 0; \
-        for (int64_t d=0; d < index->coords.rank; ++d) index_offset += idx_coords[d]*index->coords.strides[d]; \
+        for (int64_t dim=0; dim < index->coords.rank; ++dim) \
+          index_offset += oc[axis + dim] * index->coords.strides[dim]; \
         gather_idx = bi[index_offset]; \
       } \
       if (gather_idx < 0) gather_idx += ax; \
-      mag_assert2(gather_idx >= 0 && gather_idx < ax); \
-      if (full) { \
-        for (int64_t d=0; d < src->coords.rank; ++d) sc[d] = oc[d]; \
-        sc[axis] = gather_idx; \
-      } else if (index->coords.rank == 1) { \
-        for (int64_t d=0; d < src->coords.rank; ++d) sc[d] = oc[d]; \
+      mag_contract(err, ERR_KERNEL_FAILURE, {}, gather_idx >= 0 && gather_idx < ax, "Gather index: %" PRIi64 " must be within [0, %" PRIi64 ")", gather_idx, ax); \
+      if (full || index->coords.rank == 1) { \
+        for (int64_t dim=0; dim < src->coords.rank; ++dim) sc[dim] = oc[dim]; \
         sc[axis] = gather_idx; \
       } else { \
-        for (int64_t d=0; d < axis; ++d) sc[d] = oc[d]; \
+        for (int64_t dim=0; dim < axis; ++dim) sc[dim] = oc[dim]; \
         sc[axis] = gather_idx; \
-        for (int64_t d=axis+1; d < src->coords.rank; ++d) sc[d] = oc[index->coords.rank+d-1]; \
+        for (int64_t dim = axis + 1; dim < src->coords.rank; ++dim) \
+          sc[dim] = oc[index->coords.rank + dim - 1]; \
       } \
-      int64_t src_offset = 0, dest_offset = 0; \
-      for (int64_t d=0; d < src->coords.rank; ++d) src_offset += sc[d]*src->coords.strides[d]; \
-      for (int64_t d=0; d < r->coords.rank; ++d) dest_offset += oc[d]*r->coords.strides[d]; \
-      mag_bnd_chk(bx + src_offset, bx, mag_tensor_numbytes(src)); \
-      mag_bnd_chk(br + dest_offset, br, mag_tensor_numbytes(r)); \
-      br[dest_offset] = bx[src_offset]; \
+      int64_t src_offset = 0; \
+      int64_t dst_offset = 0; \
+      for (int64_t dim=0; dim < src->coords.rank; ++dim) \
+        src_offset += sc[dim]*src->coords.strides[dim]; \
+      for (int64_t dim=0; dim < r->coords.rank; ++dim) \
+        dst_offset += oc[dim]*r->coords.strides[dim]; \
+      br[dst_offset] = bx[src_offset]; \
     } \
     return MAG_STATUS_OK; \
   }
@@ -259,7 +327,7 @@ mag_gen_stub_tri_mask(int64_t, int64, u, 0, >=)
 #undef mag_gen_stub_tri_mask
 
 #define mag_gen_stub_topk(T, TF, CVT) \
-  static MAG_HOTPROC mag_status_t mag_topk_##TF(mag_error_t *err,const mag_kernel_payload_t *payload) { \
+  static MAG_HOTPROC mag_status_t mag_topk_##TF(mag_error_t *err, const mag_kernel_payload_t *payload) { \
     (void)err; \
     const mag_tensor_t *x = mag_cmd_in(0); \
     mag_tensor_t *v = mag_cmd_out(0); \
@@ -347,7 +415,7 @@ mag_gen_stub_tri_mask(int64_t, int64, u, 0, >=)
             const int64_t previ = best_idx[ins - 1]; \
             bool better; \
             if (largest) better = (xvc > prevc) || ((xvc == prevc) && (p < previ)); \
-            else better = (xvc < prevc) || ((xvc == prevc) && (p < previ)); \
+            else         better = (xvc < prevc) || ((xvc == prevc) && (p < previ)); \
             if (!better) break; \
             best_vals[ins] = best_vals[ins - 1]; \
             best_idx[ins] = best_idx[ins - 1]; \
