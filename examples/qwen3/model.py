@@ -88,9 +88,9 @@ class MLP(nn.Module):
         super().__init__()
         self.hidden_size: int = config.hidden_size
         self.inter_size: int = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.inter_size, bias=False, init=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.inter_size, bias=False, init=False)
-        self.down_proj = nn.Linear(self.inter_size, self.hidden_size, bias=False, init=False)
+        self.gate_proj = nn.Linear(self.hidden_size, self.inter_size, bias=False, dtype=dtype.float8_e4m3fn, init=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.inter_size, bias=False, dtype=dtype.float8_e4m3fn, init=False)
+        self.down_proj = nn.Linear(self.inter_size, self.hidden_size, bias=False, dtype=dtype.float8_e4m3fn, init=False)
 
     def forward(self, x: Tensor) -> Tensor:
         return self.down_proj(self.gate_proj(x).silu() * self.up_proj(x))
@@ -143,10 +143,10 @@ class SlidingWindowAttention(nn.Module):
         self.num_kv_heads = config.num_key_value_heads
         self.n_rep = self.num_heads // self.num_kv_heads
         self.sliding_window = config.sliding_window
-        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False, init=False)
-        self.k_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=False, init=False)
-        self.v_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=False, init=False)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False, init=False)
+        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False, dtype=dtype.float8_e4m3fn, init=False)
+        self.k_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=False, dtype=dtype.float8_e4m3fn, init=False)
+        self.v_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=False, dtype=dtype.float8_e4m3fn, init=False)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False, dtype=dtype.float8_e4m3fn, init=False)
         self.q_norm = nn.RMSNorm(self.head_dim, eps=config.rms_norm_eps, init=False)
         self.k_norm = nn.RMSNorm(self.head_dim, eps=config.rms_norm_eps, init=False)
 

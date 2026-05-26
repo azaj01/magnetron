@@ -1406,6 +1406,60 @@ mag_status_t mag_matmul(mag_error_t *err, mag_tensor_t **out_result, mag_tensor_
   return MAG_STATUS_OK;
 }
 
+mag_status_t mag_scaled_matmul(mag_error_t *err, mag_tensor_t **out_result, mag_tensor_t *x, mag_tensor_t *w, mag_tensor_t *scale_scalar) {
+  *out_result = NULL;
+  mag_contract(err, ERR_INVALID_PARAM, {}, mag_tensor_is_floating_point_typed(x), "x must be a floating-point tensor.");
+  mag_contract(err, ERR_INVALID_PARAM, {}, w->dtype == MAG_DTYPE_FLOAT8_E4M3FN, "w must have dtype %s, got '%s'.", mag_type_trait(MAG_DTYPE_FLOAT8_E4M3FN)->name, mag_type_trait(w->dtype)->name);
+  mag_contract(err, ERR_INVALID_PARAM, {}, scale_scalar->dtype == MAG_DTYPE_FLOAT32, "scale_scalar must have dtype %s, got '%s'.", mag_type_trait(MAG_DTYPE_FLOAT32)->name, mag_type_trait(scale_scalar->dtype)->name);
+  mag_contract(err, ERR_INVALID_PARAM, {}, scale_scalar->numel == 1, "w_scale_f32 must be a scalar (1 element), got numel=%" PRIi64 ".", scale_scalar->numel);
+  mag_contract(err, ERR_INVALID_PARAM, {}, x->coords.rank >= 1 && w->coords.rank >= 1, "x and w must have rank at least 1.");
+  mag_tensor_t *result = NULL;
+  mag_try(mag_check_dtype_and_device_compat(err, MAG_OP_SCALED_MATMUL, (mag_tensor_t *[3]){x, w, scale_scalar}, 0));
+  int64_t kx = x->coords.shape[x->coords.rank-1];
+  int64_t ky = w->coords.rank == 1 ? *w->coords.shape : w->coords.rank == 2 && x->coords.rank == 1 ? *w->coords.shape : w->coords.shape[w->coords.rank-2];
+  if (kx != ky) {
+    char sx[MAG_FMT_DIM_BUF_SIZE];
+    char sy[MAG_FMT_DIM_BUF_SIZE];
+    mag_fmt_shape(&sx, &x->coords.shape, x->coords.rank);
+    mag_fmt_shape(&sy, &w->coords.shape, w->coords.rank);
+    mag_contract(
+      err, ERR_OPERATOR_IMPOSSIBLE, {}, 0,
+      "Cannot perform scaled matmul on tensors with shapes %s and %s: "
+      "last dimension of x (%" PRIi64 ") does not match fp8 weight's dim (%" PRIi64 ").\n",
+      sx, sy, kx, ky
+    );
+  }
+  int64_t xbd = x->coords.rank > 2 ? x->coords.rank-2 : 0;
+  int64_t ybd = w->coords.rank > 2 ? w->coords.rank-2 : 0;
+  int64_t rbd = xbd > ybd ? xbd : ybd;
+  for (int64_t i=0; i < rbd; ++i) {
+    int64_t xd = i < rbd-xbd ? 1 : x->coords.shape[i-(rbd-xbd)];
+    int64_t yd = i < rbd-ybd ? 1 : w->coords.shape[i-(rbd-ybd)];
+    if (xd != yd && xd != 1 && yd != 1) {
+      mag_contract(err, ERR_OPERATOR_IMPOSSIBLE, {}, 0, "incompatible batch dimensions.");
+    }
+  }
+  if (x->coords.rank == 1 && w->coords.rank == 1) mag_try(mag_empty_scalar(err, &result, x->ctx, x->dtype, mag_tensor_device_id(x)));
+  else if (x->coords.rank == 1 && w->coords.rank == 2) mag_try(mag_empty(err, &result, x->ctx, x->dtype, 1, w->coords.shape+1, mag_tensor_device_id(x)));
+  else if (x->coords.rank == 2 && w->coords.rank == 1) mag_try(mag_empty(err, &result, x->ctx, x->dtype, 1, x->coords.shape, mag_tensor_device_id(x)));
+  else {
+    xbd = x->coords.rank-2;
+    ybd = w->coords.rank-2;
+    int64_t shape[MAG_MAX_DIMS] = {0};
+    for (int64_t i=0; i < rbd; ++i) {
+      int64_t da = i < rbd-xbd ? 1 : x->coords.shape[i-(rbd-xbd)];
+      int64_t db = i < rbd-ybd ? 1 : w->coords.shape[i-(rbd-ybd)];
+      shape[i] = da > db ? da : db;
+    }
+    shape[rbd] = x->coords.shape[x->coords.rank-2];
+    shape[rbd+1] = w->coords.shape[w->coords.rank-1];
+    mag_try(mag_empty(err, &result, x->ctx, x->dtype, rbd+2, shape, mag_tensor_device_id(x)));
+  }
+  mag_try(mag_dispatch(err, MAG_OP_SCALED_MATMUL, false, NULL, (mag_tensor_t *[3]) {x, w, scale_scalar}, 3, &result, 1));
+  *out_result = result;
+  return MAG_STATUS_OK;
+}
+
 mag_status_t mag_repeat_back(mag_error_t *err, mag_tensor_t **out_result, mag_tensor_t *x, mag_tensor_t *y) {
   *out_result = NULL;
   mag_tensor_t *result = NULL;

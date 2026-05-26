@@ -96,6 +96,7 @@ mag_op_thread_scaling_info mag_cpu_get_op_thread_scaling_info(mag_opcode_t op) {
     [MAG_OP_DIV] = {3.5, 10000},
     [MAG_OP_MOD] = {3.5, 10000},
     [MAG_OP_MATMUL] = {0.4, 1000},
+    [MAG_OP_SCALED_MATMUL] = {0.4, 1000},
     [MAG_OP_REPEAT_BACK] = {0.5, 25000},
     [MAG_OP_GATHER] = {0.0, 0},
     [MAG_OP_AND] = {3.5, 10000},

@@ -29,7 +29,6 @@ typedef enum mag_opflags_t {
 #define MAG_OP_INOUT_DYN (UINT32_MAX-1) /* Flags flexible input/output count. Used for operations that can have arbitrary number of inputs/outputs such as split or cat. */
 #define mag_params(...) { __VA_ARGS__ }
 
-/* Enumerator, Input Count, Output Count, DType Mask, Op Param Layout, Flags, Backward Function, cpu growth, cpu tresh */
 #define mag_opdef(_, __)\
   _(NOP, 0, 0, NONE, {}, MAG_OP_FLAG_NONE, NULL)__\
   _(FILL, 0, 1, ALL, {}, MAG_OP_FLAG_SUPPORT_CPU_MULTITHREADING, NULL)__\
@@ -113,6 +112,7 @@ typedef enum mag_opflags_t {
   _(MOD, 2, 1, NUMERIC, {}, MAG_OP_FLAGS_COMMON, NULL)__\
   _(POW, 2, 1, NUMERIC, {}, MAG_OP_FLAGS_COMMON, NULL)__\
   _(MATMUL, 2, 1, FP, {}, MAG_OP_FLAGS_COMMON, matmul)__\
+  _(SCALED_MATMUL, 3, 1, FP, {}, MAG_OP_FLAGS_COMMON, NULL)__\
   _(REPEAT_BACK, 2, 1, FP, {}, MAG_OP_FLAGS_COMMON, NULL)__\
   _(GATHER, 2, 1, ALL, mag_params(MAG_OP_ATTR_TYPE_I64), MAG_OP_FLAG_NONE, NULL)__\
   _(AND, 2, 1, INTEGRAL, {}, MAG_OP_FLAGS_COMMON, NULL)__\

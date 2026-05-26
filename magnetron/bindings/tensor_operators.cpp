@@ -784,18 +784,30 @@ namespace mag::bindings {
     bind_compare(cls, eq, eq, eq, "Element-wise equality.");
     bind_compare(cls, ne, ne, ne, "Element-wise not equal.");
 
-    // Matmul
-    cls.def("__matmul__",
-      [](const tensor_wrapper &a, nb::handle rhs) -> tensor_wrapper {
-        std::lock_guard lock {get_global_mutex()};
-        tensor_wrapper b = normalize_rhs_to_tensor(a, rhs);
-        mag_tensor_t *out = nullptr;
-        mag_error_t err {};
-        throw_if_error(mag_matmul(&err, &out, *a, *b), err);
-        return tensor_wrapper{out};
-      },
+    auto matmul_impl = [](const tensor_wrapper &self, nb::handle rhs) -> tensor_wrapper {
+      std::lock_guard lock{get_global_mutex()};
+      tensor_wrapper b = normalize_rhs_to_tensor(self, rhs);
+      mag_tensor_t *out = nullptr;
+      mag_error_t err{};
+      throw_if_error(mag_matmul(&err, &out, *self, *b), err);
+      return tensor_wrapper{out};
+    };
+
+    cls.def("__matmul__", matmul_impl,
       "rhs"_a,
-      "Matrix multiplication (or batch matmul). Supports @ operator."
+      "Matrix multiplication. Supports @ operator."
     );
+    cls.def("matmul", matmul_impl,
+      "rhs"_a,
+      "Matrix multiplication."
+    );
+
+    cls.def("scaled_matmul", [](const tensor_wrapper &self, const tensor_wrapper &fp8_w, const tensor_wrapper &scale_scalar) -> tensor_wrapper {
+      std::lock_guard lock{get_global_mutex()};
+      mag_tensor_t *out = nullptr;
+      mag_error_t err{};
+      throw_if_error(mag_scaled_matmul(&err, &out, *self, *fp8_w, *scale_scalar), err);
+      return tensor_wrapper{out};
+    }, "fp8_w"_a, "scale_scalar"_a);
   }
 }
