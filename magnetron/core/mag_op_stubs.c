@@ -972,7 +972,9 @@ static mag_status_t mag_op_stub_unary(mag_error_t *err, mag_tensor_t **out_resul
   } else {
     mag_try(mag_empty_like(err, &result, x)); /* Allocate a new tensor for the result */
   }
-  mag_try(mag_dispatch(err, op, inplace, layout, &x, 1, &result, 1));
+  mag_try_or(mag_dispatch(err, op, inplace, layout, &x, 1, &result, 1), {
+    mag_tensor_decref(result);
+  });
   *out_result = result;
   return MAG_STATUS_OK;
 }

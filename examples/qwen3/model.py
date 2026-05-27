@@ -12,6 +12,7 @@ import math
 from collections.abc import Iterator
 from typing import Any
 from enum import Enum, unique
+
 from magnetron import Tensor, Snapshot, nn, dtype, context
 from dataclasses import dataclass
 
@@ -41,6 +42,7 @@ class Qwen3HyperParams:
     bos_token_id: int = 151643
     eos_token_id: int = 151645
     sampling_strategy: SamplingStrategy = SamplingStrategy.GREEDY
+    quant_dtype: dtype.DType | None = dtype.float8_e4m3fn
 
 
 class KVLayerCache:
@@ -68,11 +70,11 @@ class KVLayerCache:
 
 
 class KVCache:
-    def __init__(self, config: Qwen3HyperParams, batch_size: int = 1, max_seq_len: int | None = None) -> None:
-        max_seq_len = max_seq_len or config.max_position_embeddings
+    def __init__(self, cfg: Qwen3HyperParams, batch_size: int = 1, max_seq_len: int | None = None) -> None:
+        max_seq_len = max_seq_len or cfg.max_position_embeddings
         self.layers: list[KVLayerCache] = [
-            KVLayerCache(batch_size=batch_size, num_kv_heads=config.num_key_value_heads, max_seq_len=max_seq_len, head_dim=config.head_dim)
-            for _ in range(config.num_hidden_layers)
+            KVLayerCache(batch_size=batch_size, num_kv_heads=cfg.num_key_value_heads, max_seq_len=max_seq_len, head_dim=cfg.head_dim)
+            for _ in range(cfg.num_hidden_layers)
         ]
 
     def __getitem__(self, idx: int) -> KVLayerCache:
@@ -84,13 +86,13 @@ class KVCache:
 
 
 class MLP(nn.Module):
-    def __init__(self, config: Qwen3HyperParams) -> None:
+    def __init__(self, cfg: Qwen3HyperParams) -> None:
         super().__init__()
-        self.hidden_size: int = config.hidden_size
-        self.inter_size: int = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.inter_size, bias=False, dtype=dtype.float8_e4m3fn, init=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.inter_size, bias=False, dtype=dtype.float8_e4m3fn, init=False)
-        self.down_proj = nn.Linear(self.inter_size, self.hidden_size, bias=False, dtype=dtype.float8_e4m3fn, init=False)
+        self.hidden_size: int = cfg.hidden_size
+        self.inter_size: int = cfg.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.inter_size, bias=False, dtype=cfg.quant_dtype, init=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.inter_size, bias=False, dtype=cfg.quant_dtype, init=False)
+        self.down_proj = nn.Linear(self.inter_size, self.hidden_size, bias=False, dtype=cfg.quant_dtype, init=False)
 
     def forward(self, x: Tensor) -> Tensor:
         return self.down_proj(self.gate_proj(x).silu() * self.up_proj(x))
@@ -136,19 +138,19 @@ def _apply_rope(q: Tensor, k: Tensor, freq_cos: Tensor, freq_sin: Tensor, idx: T
 
 
 class SlidingWindowAttention(nn.Module):
-    def __init__(self, config: Qwen3HyperParams) -> None:
+    def __init__(self, cfg: Qwen3HyperParams) -> None:
         super().__init__()
-        self.head_dim = config.head_dim
-        self.num_heads = config.num_attention_heads
-        self.num_kv_heads = config.num_key_value_heads
+        self.head_dim = cfg.head_dim
+        self.num_heads = cfg.num_attention_heads
+        self.num_kv_heads = cfg.num_key_value_heads
         self.n_rep = self.num_heads // self.num_kv_heads
-        self.sliding_window = config.sliding_window
-        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False, dtype=dtype.float8_e4m3fn, init=False)
-        self.k_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=False, dtype=dtype.float8_e4m3fn, init=False)
-        self.v_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=False, dtype=dtype.float8_e4m3fn, init=False)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False, dtype=dtype.float8_e4m3fn, init=False)
-        self.q_norm = nn.RMSNorm(self.head_dim, eps=config.rms_norm_eps, init=False)
-        self.k_norm = nn.RMSNorm(self.head_dim, eps=config.rms_norm_eps, init=False)
+        self.sliding_window = cfg.sliding_window
+        self.q_proj = nn.Linear(cfg.hidden_size, self.num_heads * self.head_dim, bias=False, dtype=cfg.quant_dtype, init=False)
+        self.k_proj = nn.Linear(cfg.hidden_size, self.num_kv_heads * self.head_dim, bias=False, dtype=cfg.quant_dtype, init=False)
+        self.v_proj = nn.Linear(cfg.hidden_size, self.num_kv_heads * self.head_dim, bias=False, dtype=cfg.quant_dtype, init=False)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, cfg.hidden_size, bias=False, dtype=cfg.quant_dtype, init=False)
+        self.q_norm = nn.RMSNorm(self.head_dim, eps=cfg.rms_norm_eps, init=False)
+        self.k_norm = nn.RMSNorm(self.head_dim, eps=cfg.rms_norm_eps, init=False)
 
     def forward(self, x: Tensor, cos_freq: Tensor, sin_freq: Tensor, idx: Tensor, cache: KVLayerCache | None = None) -> Tensor:
         B, T, _ = x.shape
@@ -176,12 +178,12 @@ class SlidingWindowAttention(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, config: Qwen3HyperParams) -> None:
+    def __init__(self, cfg: Qwen3HyperParams) -> None:
         super().__init__()
-        self.self_attn = SlidingWindowAttention(config)
-        self.mlp = MLP(config)
-        self.input_layernorm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps, init=False)
-        self.post_attention_layernorm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps, init=False)
+        self.self_attn = SlidingWindowAttention(cfg)
+        self.mlp = MLP(cfg)
+        self.input_layernorm = nn.RMSNorm(cfg.hidden_size, eps=cfg.rms_norm_eps, init=False)
+        self.post_attention_layernorm = nn.RMSNorm(cfg.hidden_size, eps=cfg.rms_norm_eps, init=False)
 
     def forward(self, x: Tensor, freq_cos: Tensor, freq_sin: Tensor, idx: Tensor, cache: KVLayerCache | None = None) -> Tensor:
         h = x + self.self_attn(
@@ -195,22 +197,23 @@ class Block(nn.Module):
 
 
 class Qwen3Model(nn.Module):
-    def __init__(self, config: Qwen3HyperParams) -> None:
+    def __init__(self, cfg: Qwen3HyperParams) -> None:
         super().__init__()
-        self.config = config
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, init=False)
-        self.layers = nn.ModuleList([Block(config) for _ in range(config.num_hidden_layers)])
-        self.norm = nn.RMSNorm(config.hidden_size, config.rms_norm_eps, init=False)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False, init=False)
-        if config.tie_word_embeddings:
-            self.lm_head.weight = self.embed_tokens.weight
-        cos_cache, sin_cache = _precompute_freq_cache(config.head_dim, config.rope_theta, config.max_position_embeddings)
+        self.cfg = cfg
+        self.embed_tokens = nn.Embedding(cfg.vocab_size, cfg.hidden_size, init=False)
+        self.layers = nn.ModuleList([Block(cfg) for _ in range(cfg.num_hidden_layers)])
+        self.norm = nn.RMSNorm(cfg.hidden_size, cfg.rms_norm_eps, init=False)
+        if cfg.tie_word_embeddings:
+            self.lm_head = None
+        else:
+            self.lm_head = nn.Linear(cfg.hidden_size, cfg.vocab_size, bias=False, dtype=cfg.quant_dtype, init=False)
+        cos_cache, sin_cache = _precompute_freq_cache(cfg.head_dim, cfg.rope_theta, cfg.max_position_embeddings)
         self.cos_cache = cos_cache
         self.sin_cache = sin_cache
         self.cache = self._alloc_kv_cache()
 
     def _alloc_kv_cache(self) -> KVCache:
-        return KVCache(self.config)
+        return KVCache(self.cfg)
 
     def _load_from_snapshot(self, snapshot_file: str) -> None:
         with Snapshot.read(snapshot_file) as snap:
@@ -241,7 +244,8 @@ class Qwen3Model(nn.Module):
         for i, layer in enumerate(self.layers):
             layer_cache = self.cache[i] if self.cache is not None else None
             h = layer(h, self.cos_cache, self.sin_cache, idx, cache=layer_cache)
-        return self.lm_head(self.norm(h))
+        h = self.norm(h)
+        return h @ self.embed_tokens.weight.T if self.cfg.tie_word_embeddings else self.lm_head(h)
 
     def generate_stream(
         self,
@@ -272,8 +276,8 @@ class Qwen3Model(nn.Module):
         pending: list[int] = []
 
         for _ in range(max_tokens):
-            tok_id: int = sample(next_logits.reshape(-1), self.config.sampling_strategy)
-            if tok_id == self.config.eos_token_id or tok_id in _EOS:
+            tok_id: int = sample(next_logits.reshape(-1), self.cfg.sampling_strategy)
+            if tok_id == self.cfg.eos_token_id or tok_id in _EOS:
                 return
             pending.append(tok_id)
             delta: str = tokenizer.decode(pending)

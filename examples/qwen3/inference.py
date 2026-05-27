@@ -81,7 +81,7 @@ class InferenceEngine:
         assert snapshot is not None
         start = time.perf_counter()
         context.stop_grad_recorder()
-        context.set_default_dtype(dtype.float8_e4m3fn)
+        context.set_default_dtype(dtype.bfloat16)
         context.manual_seed(config.seed)
         if context.is_device_available(config.device):
             context.set_default_device(config.device)

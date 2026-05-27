@@ -1458,3 +1458,312 @@ static MAG_HOTPROC mag_status_t mag_matmul_float16(mag_error_t *err,const mag_ke
   }
   return MAG_STATUS_OK;
 }
+
+static MAG_AINLINE float mag_f32_id_in(float x) { return x; }
+static MAG_AINLINE float mag_f32_id_out(float x) { return x; }
+
+static MAG_AINLINE float mag_vf32_hsum(mag_vf32_t v) {
+  mag_alignas(64) float tmp[MAG_L];
+  mag_vf32_storeu(tmp, v);
+  float s = 0.0f;
+  for (int i=0; i < MAG_L; ++i) s += tmp[i];
+  return s;
+}
+
+static MAG_AINLINE void mag_mm_pack_B_kc_nc_fp8w_to_bfloat16(
+  int64_t kc, int64_t nc,
+  const mag_float8_e4m3fn_t *restrict Bsrc, ptrdiff_t strideK, ptrdiff_t strideN,
+  float scale,
+  mag_bfloat16_t *restrict Bp
+) {
+  mag_vf32_t svec = mag_vf32_splat(scale);
+  if (strideN == 1) { /* Each source row is nc consecutive FP8: SIMD-load, scale, store as BF16. */
+    for (int64_t k=0; k < kc; ++k) {
+      if (k + 1 < kc) mag_simd_prefetch_t0((const char *)(Bsrc + (k + 1)*strideK));
+      const mag_float8_e4m3fn_t *src = Bsrc + k*strideK;
+      mag_bfloat16_t *dst = Bp + k*nc;
+      int64_t j = 0;
+      for (; j + MAG_L <= nc; j += MAG_L) {
+        mag_vf32_t v = mag_vf32_mul(mag_vf32_loadu_float8_e4m3fn(src + j), svec);
+        mag_vf32_storeu_bf16(dst + j, v);
+      }
+      for (; j < nc; ++j) dst[j] = mag_float32_to_bfloat16(mag_float8_e4m3fn_to_float32(src[j])*scale);
+    }
+    return;
+  }
+  if (strideK == 1) {
+    enum { NT = 8 };
+    mag_alignas(64) float stage[NT][MAG_L];
+    int64_t nb = 0;
+    for (; nb + NT <= nc; nb += NT) {
+      int64_t k = 0;
+      for (; k + MAG_L <= kc; k += MAG_L) {
+        for (int jj=0; jj < NT; ++jj) {
+          const mag_float8_e4m3fn_t *src = Bsrc + (nb + jj)*strideN + k;
+          mag_vf32_t v = mag_vf32_mul(mag_vf32_loadu_float8_e4m3fn(src), svec);
+          mag_vf32_storeu(stage[jj], v);
+        }
+        for (int l=0; l < MAG_L; ++l) {
+          mag_bfloat16_t *dst = Bp + (k+l)*nc + nb;
+          for (int jj=0; jj < NT; ++jj)
+            dst[jj] = mag_float32_to_bfloat16(stage[jj][l]);
+        }
+      }
+      for (; k < kc; ++k) {
+        for (int jj=0; jj < NT; ++jj) {
+          float v = mag_float8_e4m3fn_to_float32(Bsrc[(nb + jj)*strideN + k])*scale;
+          Bp[k*nc + nb + jj] = mag_float32_to_bfloat16(v);
+        }
+      }
+    }
+    for (; nb < nc; ++nb) {
+      const mag_float8_e4m3fn_t *src = Bsrc + nb*strideN;
+      int64_t k = 0;
+      for (; k + MAG_L <= kc; k += MAG_L) {
+        mag_vf32_t v = mag_vf32_mul(mag_vf32_loadu_float8_e4m3fn(src + k), svec);
+        mag_alignas(64) float tmp[MAG_L];
+        mag_vf32_storeu(tmp, v);
+        for (int l=0; l < MAG_L; ++l) Bp[(k+l)*nc + nb] = mag_float32_to_bfloat16(tmp[l]);
+      }
+      for (; k < kc; ++k) Bp[k*nc + nb] = mag_float32_to_bfloat16(mag_float8_e4m3fn_to_float32(src[k])*scale);
+    }
+    return;
+  }
+  for (int64_t k=0; k < kc; ++k) {
+    for (int64_t j=0; j < nc; ++j) {
+      float v = mag_float8_e4m3fn_to_float32(Bsrc[k*strideK + j*strideN])*scale;
+      Bp[k*nc + j] = mag_float32_to_bfloat16(v);
+    }
+  }
+}
+
+static MAG_AINLINE void mag_mm_pack_B_vec_fp8w_to_bfloat16(
+  int64_t kc, int64_t nc,
+  const mag_float8_e4m3fn_t *restrict yvec, float scale,
+  mag_bfloat16_t *restrict Bp
+) {
+  for (int64_t k=0; k < kc; ++k) {
+    mag_bfloat16_t v = mag_float32_to_bfloat16(mag_float8_e4m3fn_to_float32(yvec[k])*scale);
+    mag_bfloat16_t *dst = Bp + k*nc;
+    for (int64_t j=0; j < nc; ++j) dst[j] = v;
+  }
+}
+
+#define mag_gen_gemv_fp8w(TX, name_suffix, x_to_f32, f32_to_x, vf32_loadu_x)                             \
+static MAG_AINLINE void mag_gemv_fp8w_##name_suffix(                                                     \
+  int64_t K,                                                                                             \
+  const TX *restrict A,                                                                                  \
+  const mag_float8_e4m3fn_t *restrict B,                                                                 \
+  int64_t sKy, int64_t sNy,                                                                              \
+  TX *restrict C,                                                                                        \
+  int64_t sNc,                                                                                           \
+  int64_t n0, int64_t n1,                                                                                \
+  float scale                                                                                            \
+) {                                                                                                      \
+  if (sKy == 1) { \
+    for (int64_t n=n0; n < n1; ++n) {                                                                    \
+      const mag_float8_e4m3fn_t *brow = B + n*sNy;                                                       \
+      int64_t k = 0;                                                                                     \
+      mag_vf32_t acc = mag_vf32_zero();                                                                  \
+      for (; k + MAG_L <= K; k += MAG_L) {                                                               \
+        mag_vf32_t a = vf32_loadu_x(A + k);                                                              \
+        mag_vf32_t b = mag_vf32_loadu_float8_e4m3fn(brow + k);                                           \
+        acc = mag_vf32_fmadd(a, b, acc);                                                                 \
+      }                                                                                                  \
+      float sum = mag_vf32_hsum(acc);                                                                    \
+      for (; k < K; ++k) sum += x_to_f32(A[k]) * mag_float8_e4m3fn_to_float32(brow[k]);                  \
+      C[n*sNc] = f32_to_x(sum*scale);                                                                    \
+    }                                                                                                    \
+    return;                                                                                              \
+  }                                                                                                      \
+  for (int64_t n=n0; n < n1; ++n) {                                                                      \
+    float sum = 0.0f;                                                                                    \
+    for (int64_t k=0; k < K; ++k)                                                                        \
+      sum += x_to_f32(A[k]) * mag_float8_e4m3fn_to_float32(B[k*sKy + n*sNy]);                            \
+    C[n*sNc] = f32_to_x(sum*scale);                                                                      \
+  }                                                                                                      \
+}
+
+mag_gen_gemv_fp8w(mag_bfloat16_t, bfloat16, mag_bfloat16_to_float32, mag_float32_to_bfloat16, mag_vf32_loadu_bf16)
+mag_gen_gemv_fp8w(mag_float16_t,  float16,  mag_float16_to_float32,  mag_float32_to_float16,  mag_vf32_loadu_f16)
+mag_gen_gemv_fp8w(float,          float32,  mag_f32_id_in,           mag_f32_id_out,          mag_vf32_loadu_f32)
+
+#undef mag_gen_gemv_fp8w
+
+MAG_HOTPROC static mag_status_t mag_matmul_fp8w_bfloat16(mag_error_t *err, const mag_kernel_payload_t *payload) {
+  (void)err;
+  mag_tensor_t *r = mag_cmd_out(0);
+  const mag_tensor_t *x = mag_cmd_in(0);
+  const mag_tensor_t *w = mag_cmd_in(1);
+  const mag_tensor_t *s = mag_cmd_in(2);
+  const mag_bfloat16_t *bx = (const mag_bfloat16_t *)mag_tensor_data_ptr(x);
+  const mag_float8_e4m3fn_t *bw = (const mag_float8_e4m3fn_t *)mag_tensor_data_ptr(w);
+  mag_bfloat16_t *br = (mag_bfloat16_t *)mag_tensor_data_ptr_mut(r);
+  float scale = ((const float *)mag_tensor_data_ptr(s))[0];
+  int64_t MR = payload->mm_params.MR;
+  int64_t MC = payload->mm_params.MC;
+  int64_t KC = payload->mm_params.KC;
+  int64_t NC = payload->mm_params.NC;
+  int64_t NR = payload->mm_params.NR;
+  int64_t M = x->coords.rank == 1 ? 1 : x->coords.shape[x->coords.rank-2];
+  int64_t N = w->coords.rank == 1 ? 1 : w->coords.shape[w->coords.rank-1];
+  int64_t K = x->coords.shape[x->coords.rank-1];
+  int64_t bdr = r->coords.rank > 2 ? r->coords.rank-2 : 0;
+  int64_t batch_total = 1;
+  for (int64_t d=0; d < bdr; ++d) batch_total *= r->coords.shape[d];
+  int64_t sKx = x->coords.strides[x->coords.rank-1];
+  bool yv = w->coords.rank == 1;
+  int64_t sKy = yv ? w->coords.strides[0] : w->coords.strides[w->coords.rank-2];
+  int64_t sNy = yv ? 0 : w->coords.strides[w->coords.rank-1];
+  int64_t sNr = r->coords.rank == 0 ? 0 : r->coords.strides[r->coords.rank-1];
+  if (M == 1 && sKx == 1 && w->coords.rank == 2 && sNr == 1 && N > 0) {
+    int64_t nth = payload->thread_num;
+    int64_t tid = payload->thread_idx;
+    int64_t n_per_thread = (N + nth - 1) / nth;
+    int64_t n0 = tid*n_per_thread;
+    int64_t n1 = mag_xmin(N, n0 + n_per_thread);
+    if (n0 >= n1) return MAG_STATUS_OK;
+    for (int64_t batch=0; batch < batch_total; ++batch) {
+      const mag_bfloat16_t *A = bx + mag_offset_rmn(x, batch, 0, 0);
+      const mag_float8_e4m3fn_t *B = bw + mag_offset_rmn(w, batch, 0, 0);
+      mag_bfloat16_t *C = br + mag_offset_rmn(r, batch, 0, 0);
+      mag_gemv_fp8w_bfloat16(K, A, B, sKy, sNy, C, sNr, n0, n1, scale);
+    }
+    return MAG_STATUS_OK;
+  }
+  int64_t bdx = x->coords.rank > 2 ? x->coords.rank-2 : 0;
+  int64_t bdy = w->coords.rank > 2 ? w->coords.rank-2 : 0;
+  int64_t tic = (M+MC-1)/MC;
+  int64_t tjc = (N+NC-1)/NC;
+  int64_t tpb = tic*tjc;
+  int64_t tt = batch_total*tpb;
+  mag_scratch_arena_clear(&mag_tls_arena);
+  mag_bfloat16_t *scratch = mag_scratch_arena_alloc(&mag_tls_arena, sizeof(*scratch)*(KC*NC + MC*KC));
+  mag_bfloat16_t *Bp = scratch;
+  mag_bfloat16_t *Ap = Bp + KC*NC;
+  for (;;) {
+    int64_t tile = mag_atomic64_fetch_add(payload->mm_next_tile, 1, MAG_MO_RELAXED);
+    if (tile >= tt) break;
+    int64_t batch_idx = tile / tpb;
+    int64_t rem = tile % tpb;
+    int64_t jc = rem % tjc;
+    int64_t ic = rem / tjc;
+    int64_t idx_r[MAG_MAX_DIMS] = {0};
+    for (int64_t d=bdr-1, t=batch_idx; d >= 0; --d) {
+      idx_r[d] = t % r->coords.shape[d];
+      t /= r->coords.shape[d];
+    }
+    int64_t xb_flat = 0;
+    for (int64_t d=0; d < bdx; ++d) {
+      int64_t rd = bdr - bdx + d;
+      xb_flat = xb_flat*x->coords.shape[d] + (x->coords.shape[d] == 1 ? 0 : idx_r[rd]);
+    }
+    int64_t yb_flat = 0;
+    for (int64_t d=0; d < bdy; ++d) {
+      int64_t rd = bdr - bdy + d;
+      yb_flat = yb_flat*w->coords.shape[d] + (w->coords.shape[d] == 1 ? 0 : idx_r[rd]);
+    }
+    const mag_bfloat16_t *px_base = bx + mag_offset_rmn(x, xb_flat, 0, 0);
+    const mag_float8_e4m3fn_t *py_base = bw + mag_offset_rmn(w, yb_flat, 0, 0);
+    mag_bfloat16_t *pr_base = br + mag_offset_rmn(r, batch_idx, 0, 0);
+    int64_t i0 = ic*MC;
+    int64_t mc = i0+MC <= M ? MC : M-i0;
+    int64_t j0 = jc*NC;
+    int64_t nc = j0+NC <= N ? NC : N-j0;
+    int64_t sMx = x->coords.strides[x->coords.rank-2];
+    for (int64_t pc = 0; pc < K; pc += KC) {
+      int64_t kc = mag_xmin(KC, K - pc);
+      if (yv) mag_mm_pack_B_vec_fp8w_to_bfloat16(kc, nc, py_base + pc, scale, Bp);
+      else    mag_mm_pack_B_kc_nc_fp8w_to_bfloat16(kc, nc, py_base + pc*sKy + j0*sNy, sKy, sNy, scale, Bp);
+      mag_mm_pack_A_mc_kc_panel8_bfloat16(kc, mc, px_base + i0*sMx + pc*sKx, sMx, sKx, Ap);
+      for (int64_t ir=0; ir < mc; ir += MR)
+        for (int64_t jr=0; jr < nc; jr += NR)
+          mag_mm_block_bfloat16(
+            kc,
+            mag_xmin(MR, mc - ir),
+            mag_xmin(NR, nc - jr),
+            Ap + ir*kc,
+            kc,
+            Bp + jr,
+            nc,
+            pr_base + (i0 + ir)*N + (j0 + jr),
+            N,
+            pc);
+    }
+  }
+  mag_scratch_arena_clear(&mag_tls_arena);
+  return MAG_STATUS_OK;
+}
+
+/*
+** Simple scalar fallback for non-BF16 activations (float16, float32). These code paths
+** are not exercised by the Qwen3 example (which uses BF16 activations), so they keep
+** the slow but correct path until someone needs them.
+*/
+#define mag_gen_matmul_fp8w_kernel_scalar(TX, name_suffix, x_to_f32, f32_to_x)                           \
+MAG_HOTPROC static mag_status_t mag_matmul_fp8w_##name_suffix(mag_error_t *err, const mag_kernel_payload_t *payload) { \
+  (void)err;                                                                                             \
+  mag_tensor_t *r = mag_cmd_out(0);                                                                      \
+  const mag_tensor_t *x = mag_cmd_in(0);                                                                 \
+  const mag_tensor_t *w = mag_cmd_in(1);                                                                 \
+  const mag_tensor_t *s = mag_cmd_in(2);                                                                 \
+  const TX *bx = (const TX *)mag_tensor_data_ptr(x);                                                     \
+  const mag_float8_e4m3fn_t *bw = (const mag_float8_e4m3fn_t *)mag_tensor_data_ptr(w);                   \
+  TX *br = (TX *)mag_tensor_data_ptr_mut(r);                                                             \
+  float scale = ((const float *)mag_tensor_data_ptr(s))[0];                                              \
+  int64_t M = x->coords.rank == 1 ? 1 : x->coords.shape[x->coords.rank-2];                               \
+  int64_t N = w->coords.rank == 1 ? 1 : w->coords.shape[w->coords.rank-1];                               \
+  int64_t K = x->coords.shape[x->coords.rank-1];                                                         \
+  int64_t bdr = r->coords.rank > 2 ? r->coords.rank-2 : 0;                                               \
+  int64_t batch_total = 1;                                                                               \
+  for (int64_t d=0; d < bdr; ++d) batch_total *= r->coords.shape[d];                                     \
+  int64_t bdx = x->coords.rank > 2 ? x->coords.rank-2 : 0;                                               \
+  int64_t bdy = w->coords.rank > 2 ? w->coords.rank-2 : 0;                                               \
+  int64_t sKx = x->coords.strides[x->coords.rank-1];                                                     \
+  bool yv = w->coords.rank == 1;                                                                         \
+  int64_t sKy = yv ? w->coords.strides[0] : w->coords.strides[w->coords.rank-2];                         \
+  int64_t sNy = yv ? 0 : w->coords.strides[w->coords.rank-1];                                            \
+  int64_t sNr = r->coords.rank == 0 ? 0 : r->coords.strides[r->coords.rank-1];                           \
+  int64_t tid = payload->thread_idx;                                                                     \
+  int64_t nth = payload->thread_num;                                                                     \
+  int64_t work_total = batch_total*M;                                                                    \
+  for (int64_t work=tid; work < work_total; work += nth) {                                               \
+    int64_t b = work / M;                                                                                \
+    int64_t i = work - b*M;                                                                              \
+    int64_t idx_r[MAG_MAX_DIMS] = {0};                                                                   \
+    {                                                                                                    \
+      int64_t rem = b;                                                                                   \
+      for (int64_t d=bdr-1; d >= 0; --d) {                                                               \
+        idx_r[d] = rem % r->coords.shape[d];                                                             \
+        rem /= r->coords.shape[d];                                                                       \
+      }                                                                                                  \
+    }                                                                                                    \
+    int64_t xb_flat = 0;                                                                                 \
+    for (int64_t d=0; d < bdx; ++d) {                                                                    \
+      int64_t rd = bdr - bdx + d;                                                                        \
+      int64_t idx = x->coords.shape[d] == 1 ? 0 : idx_r[rd];                                             \
+      xb_flat = xb_flat*x->coords.shape[d] + idx;                                                        \
+    }                                                                                                    \
+    int64_t yb_flat = 0;                                                                                 \
+    for (int64_t d=0; d < bdy; ++d) {                                                                    \
+      int64_t rd = bdr - bdy + d;                                                                        \
+      int64_t idx = w->coords.shape[d] == 1 ? 0 : idx_r[rd];                                             \
+      yb_flat = yb_flat*w->coords.shape[d] + idx;                                                        \
+    }                                                                                                    \
+    const TX *A = bx + mag_offset_rmn(x, xb_flat, i, 0);                                                 \
+    const mag_float8_e4m3fn_t *B = bw + mag_offset_rmn(w, yb_flat, 0, 0);                                \
+    TX *C = br + mag_offset_rmn(r, b, i, 0);                                                             \
+    for (int64_t n=0; n < N; ++n) {                                                                      \
+      float sum = 0.0f;                                                                                  \
+      for (int64_t k=0; k < K; ++k)                                                                      \
+        sum += x_to_f32(A[k*sKx]) * mag_float8_e4m3fn_to_float32(B[k*sKy + n*sNy]);                      \
+      C[n*sNr] = f32_to_x(sum*scale);                                                                    \
+    }                                                                                                    \
+  }                                                                                                      \
+  return MAG_STATUS_OK;                                                                                  \
+}
+
+mag_gen_matmul_fp8w_kernel_scalar(mag_float16_t, float16, mag_float16_to_float32, mag_float32_to_float16)
+mag_gen_matmul_fp8w_kernel_scalar(float,         float32, mag_f32_id_in,          mag_f32_id_out)
+
+#undef mag_gen_matmul_fp8w_kernel_scalar
