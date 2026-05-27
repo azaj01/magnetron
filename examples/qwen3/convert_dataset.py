@@ -16,6 +16,7 @@ from safetensors.torch import load_file
 
 import torch
 
+
 def _mag_to_torch_dtype(mag_dtype: dtype.DType) -> torch.dtype:
     return {
         dtype.float16: torch.float16,
