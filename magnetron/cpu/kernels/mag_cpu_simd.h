@@ -1107,16 +1107,50 @@ static MAG_AINLINE void mag_vf32_storeu_bf16(mag_bfloat16_t *p, mag_vf32_t v) {
 }
 
 static MAG_AINLINE mag_vf32_t mag_vf32_loadu_float8_e4m3fn(const mag_float8_e4m3fn_t *p) {
-  mag_vf32_t r;
-  for (int i=0; i < MAG_VF32_LANES; ++i)
-    ((float *)&r)[i] = mag_float8_e4m3fn_to_float32(p[i]);
-  return r;
+  #if (defined(__aarch64__) && defined(__ARM_NEON)) || defined(_M_ARM64)
+  #elif defined(__AVX512F__) && defined(__AVX512BF16__)
+    __m512i x = _mm512_cvtepu8_epi32(_mm_loadu_si128((const __m128i *)p));
+    __m512i sign = _mm512_slli_epi32(_mm512_and_si512(x, _mm512_set1_epi32(0x80)), 24);
+    __m512i abs = _mm512_and_si512(x, _mm512_set1_epi32(0x7f));
+    __m512i exp = _mm512_srli_epi32(abs, 3);
+    __m512i mant = _mm512_and_si512(abs, _mm512_set1_epi32(0x07));
+    __m512i norm = _mm512_or_si512(sign, _mm512_or_si512(_mm512_slli_epi32(_mm512_add_epi32(exp, _mm512_set1_epi32(120)), 23), _mm512_slli_epi32(mant, 20)));
+    __m512i sub_bits = _mm512_or_si512(_mm512_castps_si512(_mm512_mul_ps(_mm512_cvtepi32_ps(mant), _mm512_set1_ps(0x1p-9f))), sign);
+    __m512i bits = _mm512_mask_blend_epi32(_mm512_cmpneq_epi32_mask(exp, _mm512_setzero_si512()), sub_bits, norm);
+    bits = _mm512_mask_blend_epi32(_mm512_cmpeq_epi32_mask(abs, _mm512_setzero_si512()), bits, sign);
+    return _mm512_castsi512_ps(bits);
+  #else
+    mag_vf32_t r;
+    for (int i=0; i < MAG_VF32_LANES; ++i)
+      ((float *)&r)[i] = mag_float8_e4m3fn_to_float32(p[i]);
+    return r;
+  #endif
 }
 
 static MAG_AINLINE void mag_vf32_storeu_float8_e4m3fn(mag_float8_e4m3fn_t *p, mag_vf32_t v) {
-  for (int i=0; i < MAG_VF32_LANES; ++i) {
-    p[i] = mag_float32_to_float8_e4m3fn(((const float*)&v)[i]);
-  }
+  #if (defined(__aarch64__) && defined(__ARM_NEON)) || defined(_M_ARM64)
+  #elif defined(__AVX512F__) && defined(__AVX512BF16__)
+    __m512i b = _mm512_castps_si512(v);
+    __m512i sign = _mm512_and_si512(b, _mm512_set1_epi32(0x80000000u));
+    __m512i abs = _mm512_xor_si512(b, sign);
+    __m512 denorm_f = _mm512_add_ps(_mm512_castsi512_ps(abs), _mm512_castsi512_ps(_mm512_set1_epi32(0x46800000u)));
+    __m512i denorm_r = _mm512_sub_epi32(_mm512_castps_si512(denorm_f), _mm512_set1_epi32(0x46800000u));
+    __m512i mant_lsb = _mm512_and_si512(_mm512_srli_epi32(abs, 20), _mm512_set1_epi32(1));
+    __m512i nb = _mm512_add_epi32(abs, _mm512_set1_epi32(((7-127)<<23)+0x7ffff));
+    __m512i norm_r = _mm512_min_epu32(_mm512_srli_epi32(_mm512_add_epi32(nb, mant_lsb), 20), _mm512_set1_epi32(0x7e));
+    __m512i sat_r = _mm512_mask_blend_epi32(
+      _mm512_cmpgt_epu32_mask(abs, _mm512_set1_epi32(0x7f800000u)),
+      _mm512_set1_epi32(0x7e),
+      _mm512_set1_epi32(0x7f)
+    );
+    norm_r = _mm512_mask_blend_epi32(_mm512_cmplt_epu32_mask(abs, _mm512_set1_epi32(0x3c800000u)), norm_r, denorm_r);
+    norm_r = _mm512_mask_blend_epi32(_mm512_cmpge_epu32_mask(abs, _mm512_set1_epi32(0x43f00000u)), norm_r, sat_r);
+    _mm_storeu_si128((__m128i *)p, _mm512_cvtepi32_epi8(_mm512_or_si512(norm_r, _mm512_srli_epi32(sign, 24))));
+  #else
+    for (int i=0; i < MAG_VF32_LANES; ++i) {
+      p[i] = mag_float32_to_float8_e4m3fn(((const float*)&v)[i]);
+    }
+  #endif
 }
 
 /* i32 vector */
