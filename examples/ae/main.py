@@ -14,7 +14,6 @@ import argparse
 from magnetron import nn, optim, context, Tensor, no_grad, dtype
 import matplotlib.pyplot as plt
 
-
 class AE(nn.Module):
     def __init__(self, w: int, h: int, latent_dim: int = 16) -> None:
         super().__init__()
@@ -35,7 +34,6 @@ class AE(nn.Module):
         y2 = self.decoder(self.encoder(x))
         return y2.view(x.shape[0], 3, self.w, self.h)
 
-
 def _main() -> None:
     args = argparse.ArgumentParser(description='Autoencoder Example')
     args.add_argument('--image', type=str, default='media/logo.png', help='Path to input image')
@@ -45,15 +43,19 @@ def _main() -> None:
     args.add_argument('--height', type=int, default=64, help='Resized image height')
     args.add_argument('--seed', type=int, default=3407, help='Random seed for reproducibility')
     args.add_argument('--lr', type=float, default=1e-3, help='Learning rate for the optimizer')
+    args.add_argument('--device', type=str, default='cuda', choices=['cpu', 'cuda'])
 
     args = args.parse_args()
     print(args)
 
     context.manual_seed(args.seed)
+    context.set_default_dtype(dtype.bfloat16)
+    if context.is_device_available(args.device): # Use specified device (e.g. GPU) if available
+        context.set_default_device(args.device)
 
     # Load and preprocess image
     image = Tensor.load_image(args.image, channels='RGB', resize_to=(args.width, args.height))  # Load image into uint8 CxHxW tensor
-    image = (image.cast(dtype.float32) / 255)[None, ...]  # Convert uint8 -> float tensor and normalize [0, 255) to [0, 1) and insert batch dim
+    image = (image.cast(context.get_default_dtype()) / 255)[None, ...]  # Convert uint8 -> float tensor and normalize [0, 255) to [0, 1) and insert batch dim
 
     # Initialize model, loss function, and optimizer
     model = AE(w=args.width, h=args.height, latent_dim=args.latent)

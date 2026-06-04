@@ -11,11 +11,18 @@ import gc
 import math
 from collections.abc import Iterator
 from typing import Any
+from enum import Enum, unique
 
-from magnetron import Tensor, Snapshot, nn, dtype
+from magnetron import Tensor, Snapshot, nn, dtype, context
 from dataclasses import dataclass
 
 _EOS: set[int] = {151645, 151643}
+
+
+@unique
+class SamplingStrategy(Enum):
+    GREEDY = 'greedy'
+    TOPK = 'topk'
 
 
 @dataclass
@@ -34,16 +41,58 @@ class Qwen3HyperParams:
     sliding_window: int | None = None
     bos_token_id: int = 151643
     eos_token_id: int = 151645
+    sampling_strategy: SamplingStrategy = SamplingStrategy.GREEDY
+    quant_dtype: dtype.DType | None = dtype.float8_e4m3fn
+
+
+class KVLayerCache:
+    def __init__(self, batch_size: int, num_kv_heads: int, max_seq_len: int, head_dim: int) -> None:
+        self.k: Tensor = Tensor.zeros(batch_size, num_kv_heads, max_seq_len, head_dim)
+        self.v: Tensor = Tensor.zeros(batch_size, num_kv_heads, max_seq_len, head_dim)
+        self.pos: int = 0
+
+    def append(self, curr_k: Tensor, curr_v: Tensor, sliding_window: int | None = None) -> tuple[Tensor, Tensor]:
+        T: int = curr_k.shape[2]
+        start: int = self.pos
+        end: int = start + T
+        if end > self.k.shape[2]:
+            raise RuntimeError(f'KV cache overflow: {end} > {self.k.shape[2]}')
+        self.k[:, :, start:end, :] = curr_k
+        self.v[:, :, start:end, :] = curr_v
+        self.pos = end
+        view_start: int = 0
+        if sliding_window is not None:
+            view_start = max(end - sliding_window, 0)
+        return self.k[:, :, view_start:end, :], self.v[:, :, view_start:end, :]
+
+    def clear(self) -> None:
+        self.pos = 0
+
+
+class KVCache:
+    def __init__(self, cfg: Qwen3HyperParams, batch_size: int = 1, max_seq_len: int | None = None) -> None:
+        max_seq_len = max_seq_len or cfg.max_position_embeddings
+        self.layers: list[KVLayerCache] = [
+            KVLayerCache(batch_size=batch_size, num_kv_heads=cfg.num_key_value_heads, max_seq_len=max_seq_len, head_dim=cfg.head_dim)
+            for _ in range(cfg.num_hidden_layers)
+        ]
+
+    def __getitem__(self, idx: int) -> KVLayerCache:
+        return self.layers[idx]
+
+    def clear(self) -> None:
+        for layer in self.layers:
+            layer.clear()
 
 
 class MLP(nn.Module):
-    def __init__(self, config: Qwen3HyperParams) -> None:
+    def __init__(self, cfg: Qwen3HyperParams) -> None:
         super().__init__()
-        self.hidden_size: int = config.hidden_size
-        self.inter_size: int = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.inter_size, bias=False, dtype=dtype.bfloat16, init=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.inter_size, bias=False, dtype=dtype.bfloat16, init=False)
-        self.down_proj = nn.Linear(self.inter_size, self.hidden_size, bias=False, dtype=dtype.bfloat16, init=False)
+        self.hidden_size: int = cfg.hidden_size
+        self.inter_size: int = cfg.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.inter_size, bias=False, dtype=cfg.quant_dtype, init=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.inter_size, bias=False, dtype=cfg.quant_dtype, init=False)
+        self.down_proj = nn.Linear(self.inter_size, self.hidden_size, bias=False, dtype=cfg.quant_dtype, init=False)
 
     def forward(self, x: Tensor) -> Tensor:
         return self.down_proj(self.gate_proj(x).silu() * self.up_proj(x))
@@ -64,10 +113,10 @@ def _repeat_kv(x: Tensor, n_rep: int) -> Tensor:
 def _precompute_freq_cache(dim: int, theta: float, max_seq_len: int) -> tuple[Tensor, Tensor]:
     inv_freq = (theta ** -(Tensor.arange(0, dim, 2, dtype=dtype.float32) / dim)).reshape(1, -1)
     freqs = Tensor.arange(stop=max_seq_len, dtype=dtype.float32).reshape(max_seq_len, 1) * inv_freq
-    cos_half = Tensor.cos(freqs)
-    sin_half = Tensor.sin(freqs)
-    cos = Tensor.cat([cos_half, cos_half], dim=-1).cast(dtype.bfloat16)
-    sin = Tensor.cat([sin_half, sin_half], dim=-1).cast(dtype.bfloat16)
+    cos_half = freqs.cos()
+    sin_half = freqs.sin()
+    cos = Tensor.cat([cos_half, cos_half], dim=-1).cast(context.get_default_dtype())
+    sin = Tensor.cat([sin_half, sin_half], dim=-1).cast(context.get_default_dtype())
     return cos, sin
 
 
@@ -89,88 +138,82 @@ def _apply_rope(q: Tensor, k: Tensor, freq_cos: Tensor, freq_sin: Tensor, idx: T
 
 
 class SlidingWindowAttention(nn.Module):
-    def __init__(self, config: Qwen3HyperParams) -> None:
+    def __init__(self, cfg: Qwen3HyperParams) -> None:
         super().__init__()
-        self.head_dim = config.head_dim
-        self.num_heads = config.num_attention_heads
-        self.num_kv_heads = config.num_key_value_heads
+        self.head_dim = cfg.head_dim
+        self.num_heads = cfg.num_attention_heads
+        self.num_kv_heads = cfg.num_key_value_heads
         self.n_rep = self.num_heads // self.num_kv_heads
-        self.sliding_window = config.sliding_window
-        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False, dtype=dtype.bfloat16, init=False)
-        self.k_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=False, dtype=dtype.bfloat16, init=False)
-        self.v_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=False, dtype=dtype.bfloat16, init=False)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False, dtype=dtype.bfloat16, init=False)
-        self.q_norm = nn.RMSNorm(self.head_dim, eps=config.rms_norm_eps, dtype=dtype.bfloat16, init=False)
-        self.k_norm = nn.RMSNorm(self.head_dim, eps=config.rms_norm_eps, dtype=dtype.bfloat16, init=False)
+        self.sliding_window = cfg.sliding_window
+        self.q_proj = nn.Linear(cfg.hidden_size, self.num_heads * self.head_dim, bias=False, dtype=cfg.quant_dtype, init=False)
+        self.k_proj = nn.Linear(cfg.hidden_size, self.num_kv_heads * self.head_dim, bias=False, dtype=cfg.quant_dtype, init=False)
+        self.v_proj = nn.Linear(cfg.hidden_size, self.num_kv_heads * self.head_dim, bias=False, dtype=cfg.quant_dtype, init=False)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, cfg.hidden_size, bias=False, dtype=cfg.quant_dtype, init=False)
+        self.q_norm = nn.RMSNorm(self.head_dim, eps=cfg.rms_norm_eps, init=False)
+        self.k_norm = nn.RMSNorm(self.head_dim, eps=cfg.rms_norm_eps, init=False)
 
-    def forward(
-        self, x: Tensor, cos_freq: Tensor, sin_freq: Tensor, idx: Tensor, prev_kv: tuple[Tensor, Tensor] | None = None
-    ) -> tuple[Tensor, tuple[Tensor, Tensor]]:
+    def forward(self, x: Tensor, cos_freq: Tensor, sin_freq: Tensor, idx: Tensor, cache: KVLayerCache | None = None) -> Tensor:
         B, T, _ = x.shape
-        q = self.q_proj(x)
-        k_cur = self.k_proj(x)
-        v_cur = self.v_proj(x)
-        q = q.reshape(B, T, self.num_heads, self.head_dim).transpose(1, 2)
-        k_cur = k_cur.reshape(B, T, self.num_kv_heads, self.head_dim).transpose(1, 2)
-        v_cur = v_cur.reshape(B, T, self.num_kv_heads, self.head_dim).transpose(1, 2)
-        q = self.q_norm(q)
-        k_cur = self.k_norm(k_cur)
-        q, k_cur = _apply_rope(q, k_cur, cos_freq, sin_freq, idx)
-        if prev_kv is not None:
-            past_k, past_v = prev_kv
-            if self.sliding_window is not None:
-                max_past = max(0, self.sliding_window - k_cur.shape[2])
-                if past_k.shape[2] > max_past:
-                    past_k = past_k[:, :, -max_past:, :]
-                    past_v = past_v[:, :, -max_past:, :]
-            k: Tensor = Tensor.cat([past_k, k_cur], dim=2)
-            v: Tensor = Tensor.cat([past_v, v_cur], dim=2)
+        curr_k = self.k_norm(self.k_proj(x).reshape(B, T, self.num_kv_heads, self.head_dim).transpose(1, 2))
+        curr_v = self.v_proj(x).reshape(B, T, self.num_kv_heads, self.head_dim).transpose(1, 2)
+        q = self.q_norm(self.q_proj(x).reshape(B, T, self.num_heads, self.head_dim).transpose(1, 2))
+        q, curr_k = _apply_rope(q, curr_k, cos_freq, sin_freq, idx)
+        if cache is not None:
+            k, v = cache.append(curr_k, curr_v, self.sliding_window)
         else:
-            k = k_cur
-            v = v_cur
-        curr_kv: tuple[Tensor, Tensor] = (k, v)
+            k, v = curr_k, curr_v
         k = _repeat_kv(k, self.n_rep)
         v = _repeat_kv(v, self.n_rep)
         scores: Tensor = (q @ k.transpose(2, 3)) * (1.0 / math.sqrt(self.head_dim))
         q_len: int = q.shape[2]
         k_len: int = k.shape[2]
-        k_pos_indices: Tensor = Tensor.arange(k_len).reshape(1, -1)
-        q_pos_indices: Tensor = Tensor.arange(start=(k_len - q_len), stop=k_len).reshape(-1, 1)
-        additive_mask = Tensor.where(k_pos_indices <= q_pos_indices, 0.0, -1e4).cast(scores.dtype).reshape(1, 1, q_len, k_len)
-        out: Tensor = ((scores + additive_mask).softmax(dim=-1) @ v).transpose(1, 2).reshape(B, T, -1)
-        return self.o_proj(out), curr_kv
+        if q_len == 1:
+            attn = scores.softmax(dim=-1)
+        else:
+            k_pos_indices: Tensor = Tensor.arange(k_len).reshape(1, -1)
+            q_pos_indices: Tensor = Tensor.arange(start=(k_len - q_len), stop=k_len).reshape(-1, 1)
+            mask = Tensor.where(k_pos_indices <= q_pos_indices, 0.0, -1e4).cast(scores.dtype).reshape(1, 1, q_len, k_len)
+            attn = (scores + mask).softmax(dim=-1)
+        return self.o_proj((attn @ v).transpose(1, 2).reshape(B, T, -1))
 
 
 class Block(nn.Module):
-    def __init__(self, config: Qwen3HyperParams) -> None:
+    def __init__(self, cfg: Qwen3HyperParams) -> None:
         super().__init__()
-        self.self_attn = SlidingWindowAttention(config)
-        self.mlp = MLP(config)
-        self.input_layernorm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps, init=False, dtype=dtype.bfloat16)
-        self.post_attention_layernorm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps, init=False, dtype=dtype.bfloat16)
+        self.self_attn = SlidingWindowAttention(cfg)
+        self.mlp = MLP(cfg)
+        self.input_layernorm = nn.RMSNorm(cfg.hidden_size, eps=cfg.rms_norm_eps, init=False)
+        self.post_attention_layernorm = nn.RMSNorm(cfg.hidden_size, eps=cfg.rms_norm_eps, init=False)
 
-    def forward(
-        self, x: Tensor, freq_cos: Tensor, freq_sin: Tensor, idx: Tensor, prev_kv: tuple[Tensor, Tensor] | None = None
-    ) -> tuple[Tensor, tuple[Tensor, Tensor]]:
-        ln_out: Tensor = self.input_layernorm(x)
-        attn_out, present_kv = self.self_attn(ln_out, freq_cos, freq_sin, idx, prev_kv)
-        h: Tensor = x + attn_out
-        return h + self.mlp(self.post_attention_layernorm(h)), present_kv
+    def forward(self, x: Tensor, freq_cos: Tensor, freq_sin: Tensor, idx: Tensor, cache: KVLayerCache | None = None) -> Tensor:
+        h = x + self.self_attn(
+            self.input_layernorm(x),
+            freq_cos,
+            freq_sin,
+            idx,
+            cache,
+        )
+        return h + self.mlp(self.post_attention_layernorm(h))
 
 
 class Qwen3Model(nn.Module):
-    def __init__(self, config: Qwen3HyperParams) -> None:
+    def __init__(self, cfg: Qwen3HyperParams) -> None:
         super().__init__()
-        self.config = config
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, init=False, dtype=dtype.bfloat16)
-        self.layers = nn.ModuleList([Block(config) for _ in range(config.num_hidden_layers)])
-        self.norm = nn.RMSNorm(config.hidden_size, config.rms_norm_eps, init=False, dtype=dtype.bfloat16)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False, dtype=dtype.bfloat16, init=False)
-        if config.tie_word_embeddings:
-            self.lm_head.weight = self.embed_tokens.weight
-        cos_cache, sin_cache = _precompute_freq_cache(config.head_dim, config.rope_theta, config.max_position_embeddings)
+        self.cfg = cfg
+        self.embed_tokens = nn.Embedding(cfg.vocab_size, cfg.hidden_size, init=False)
+        self.layers = nn.ModuleList([Block(cfg) for _ in range(cfg.num_hidden_layers)])
+        self.norm = nn.RMSNorm(cfg.hidden_size, cfg.rms_norm_eps, init=False)
+        if cfg.tie_word_embeddings:
+            self.lm_head = None
+        else:
+            self.lm_head = nn.Linear(cfg.hidden_size, cfg.vocab_size, bias=False, dtype=cfg.quant_dtype, init=False)
+        cos_cache, sin_cache = _precompute_freq_cache(cfg.head_dim, cfg.rope_theta, cfg.max_position_embeddings)
         self.cos_cache = cos_cache
         self.sin_cache = sin_cache
+        self.cache = self._alloc_kv_cache()
+
+    def _alloc_kv_cache(self) -> KVCache:
+        return KVCache(self.cfg)
 
     def _load_from_snapshot(self, snapshot_file: str) -> None:
         with Snapshot.read(snapshot_file) as snap:
@@ -180,7 +223,10 @@ class Qwen3Model(nn.Module):
                     raise RuntimeError(f'Shape mismatch for {name}: {tensor.shape} != {param.shape}')
                 if tensor.dtype != param.dtype:
                     raise RuntimeError(f'Dtype mismatch for {name}: {tensor.dtype} != {param.dtype}')
-                param.data = tensor
+                if context.get_default_device() != 'cpu:0':
+                    param.data = tensor.transfer(context.get_default_device())
+                else:
+                    param.data = tensor
 
     @staticmethod
     def from_pretrained_snapshot(snapshot_file: str) -> 'Qwen3Model':
@@ -190,19 +236,16 @@ class Qwen3Model(nn.Module):
         return model
 
     def forward(
-        self, x: Tensor, idx: Tensor, prev_kv: list[tuple[Tensor, Tensor]] | None = None, use_cache: bool = True
-    ) -> tuple[Tensor, list[tuple[Tensor, Tensor]]] | None:
+        self,
+        x: Tensor,
+        idx: Tensor,
+    ) -> Tensor:
         h = self.embed_tokens(x)
-
-        next_kv = [] if use_cache else None
         for i, layer in enumerate(self.layers):
-            layer_cache = prev_kv[i] if prev_kv is not None else None
-            h, present_kv = layer(h, self.cos_cache, self.sin_cache, idx=idx, prev_kv=layer_cache)
-            if use_cache:
-                next_kv.append(present_kv)
-
+            layer_cache = self.cache[i] if self.cache is not None else None
+            h = layer(h, self.cos_cache, self.sin_cache, idx, cache=layer_cache)
         h = self.norm(h)
-        return self.lm_head(h), next_kv
+        return h @ self.embed_tokens.weight.T if self.cfg.tie_word_embeddings else self.lm_head(h)
 
     def generate_stream(
         self,
@@ -212,33 +255,37 @@ class Qwen3Model(nn.Module):
         temp: float = 1.0,
         top_k: int = 10,
     ) -> Iterator[str]:
+
+        def sample(logits: Tensor, strategy: SamplingStrategy) -> int:  # Sample according to strategy
+            match strategy:
+                case SamplingStrategy.GREEDY:
+                    return int(logits.argmax(dim=0).item())
+                case SamplingStrategy.TOPK:
+                    top_vals, top_idx = logits.topk(top_k, dim=0, largest=True, sorted=False)
+                    return int(top_idx[top_vals.softmax(dim=-1).reshape(1, -1).multinomial(num_samples=1)[0, 0]].item())
+                case _:
+                    raise RuntimeError(f'Invalid sampling strategy: {strategy}')
+
+        self.cache.clear()
+
         idx = idx.reshape(1, -1)
-        in_len: int = idx.shape[1]
-        logits, prev_kv = self(idx, idx=Tensor.arange(stop=in_len).reshape(1, -1), prev_kv=None)
+        idl: int = idx.shape[1]
+        logits = self(idx, idx=Tensor.arange(stop=idl).reshape(1, -1))
         next_logits: Tensor = logits[:, -1, :] / temp
-        curr_len: int = in_len
-        gen_ids: list[int] = []
-        concated: str = ''
+        curr_len: int = idl
+        pending: list[int] = []
+
         for _ in range(max_tokens):
-            logits_1d: Tensor = next_logits.reshape(-1)
-            top_vals, top_idx = logits_1d.topk(top_k, dim=0, largest=True, sorted=False)
-            pick: Tensor = top_vals.softmax(dim=-1).reshape(1, -1).multinomial(num_samples=1)
-            tok_id: int = int(top_idx[pick[0, 0]].item())
-            if tok_id == self.config.eos_token_id or tok_id in _EOS:
+            tok_id: int = sample(next_logits.reshape(-1), self.cfg.sampling_strategy)
+            if tok_id == self.cfg.eos_token_id or tok_id in _EOS:
                 return
-            gen_ids.append(tok_id)
-            text: str = tokenizer.decode(gen_ids)
-            if len(text) > len(concated):
-                delta = text[len(concated) :]
-                delta = delta.replace('\ufffd', '')
-                concated = text
+            pending.append(tok_id)
+            delta: str = tokenizer.decode(pending)
+            if delta and '\ufffd' not in delta:
                 yield delta
+                pending.clear()
             input_ids = Tensor([tok_id], dtype=dtype.int64).reshape(1, 1)
-            logits, prev_kv = self(
-                input_ids,
-                idx=Tensor([curr_len], dtype=dtype.int64).reshape(1, 1),
-                prev_kv=prev_kv,
-            )
+            logits = self(input_ids, idx=Tensor([curr_len], dtype=dtype.int64).reshape(1, 1))
             next_logits = logits[:, -1, :] / temp
             curr_len += 1
 

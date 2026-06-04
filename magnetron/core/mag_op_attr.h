@@ -22,25 +22,25 @@ extern "C" {
 #define MAG_MAX_OP_PARAMS 8 /* Maximum number of parameters for an operation */
 
 typedef enum mag_op_attr_type_tag_t {
-    MAG_OP_ATTR_TYPE_EMPTY,
-    MAG_OP_ATTR_TYPE_BOOL,
-    MAG_OP_ATTR_TYPE_U64,
-    MAG_OP_ATTR_TYPE_I64,
-    MAG_OP_ATTR_TYPE_FLOAT64,
-    MAG_OP_ATTR_TYPE_PTR,
+  MAG_OP_ATTR_TYPE_EMPTY,
+  MAG_OP_ATTR_TYPE_BOOL,
+  MAG_OP_ATTR_TYPE_U64,
+  MAG_OP_ATTR_TYPE_I64,
+  MAG_OP_ATTR_TYPE_FLOAT64,
+  MAG_OP_ATTR_TYPE_PTR,
 } mag_op_attr_type_tag_t;
 
 typedef struct mag_op_attr_t {
-    mag_op_attr_type_tag_t tag;
-    union {
-        bool b;
-        uint64_t uint64_t;
-        int64_t int64_t;
-        double float64;
-        float float32;
-        mag_float16_t float16;
-        void *ptr;
-    } value;
+  mag_op_attr_type_tag_t tag;
+  union {
+    bool b;
+    uint64_t uint64_t;
+    int64_t int64_t;
+    double float64;
+    float float32;
+    mag_float16_t float16;
+    void *ptr;
+  } value;
 } mag_op_attr_t;
 mag_static_assert(sizeof(mag_op_attr_t) == 1+3+4 + 8);
 
@@ -64,32 +64,32 @@ static inline void *mag_op_attr_unwrap_ptr(mag_op_attr_t opt) { mag_check_tag(PT
 
 /* Helper for filling the operation parameters array and validating the amount. */
 typedef struct mag_op_attr_registry_t {
-    mag_op_attr_t slots[MAG_MAX_OP_PARAMS];
-    uint32_t count;
+  mag_op_attr_t slots[MAG_MAX_OP_PARAMS];
+  uint32_t count;
 } mag_op_attr_registry_t;
 
 static inline void mag_op_attr_registry_init(mag_op_attr_registry_t *set) {
-    set->count = 0;
-    for (int i=0; i < MAG_MAX_OP_PARAMS; ++i)
-        set->slots[i] = mag_op_attr_empty();
+  set->count = 0;
+  for (int i=0; i < MAG_MAX_OP_PARAMS; ++i)
+    set->slots[i] = mag_op_attr_empty();
 }
 
 static inline size_t mag_op_attr_registry_insert(mag_op_attr_registry_t *set, mag_op_attr_t param) {
-    mag_assert(set->count < MAG_MAX_OP_PARAMS, "too many operation parameters: %u, max=%d", set->count, MAG_MAX_OP_PARAMS);
-    set->slots[set->count] = param;
-    return set->count++;
+  mag_assert(set->count < MAG_MAX_OP_PARAMS, "too many operation parameters: %u, max=%d", set->count, MAG_MAX_OP_PARAMS);
+  set->slots[set->count] = param;
+  return set->count++;
 }
 
 static inline void mag_op_attr_registry_store(mag_op_attr_registry_t *set, size_t i, mag_op_attr_t param) {
-    mag_assert(i < set->count, "Invalid operation parameter index: #%zu", i);
-    mag_assert(mag_op_attr_is_empty(set->slots[i]), "Operation parameter at #%zu already set", i);
-    set->slots[i] = param;
+  mag_assert(i < set->count, "Invalid operation parameter index: #%zu", i);
+  mag_assert(mag_op_attr_is_empty(set->slots[i]), "Operation parameter at #%zu already set", i);
+  set->slots[i] = param;
 }
 
 static inline void mag_op_attr_registry_transfer(const mag_op_attr_registry_t *set, mag_op_attr_t (*out)[MAG_MAX_OP_PARAMS]) {
-    memcpy(*out, set->slots, set->count*sizeof(*set->slots));
-    for (size_t i=set->count; i < MAG_MAX_OP_PARAMS; ++i)
-        (*out)[i] = mag_op_attr_empty();
+  memcpy(*out, set->slots, set->count*sizeof(*set->slots));
+  for (size_t i=set->count; i < MAG_MAX_OP_PARAMS; ++i)
+    (*out)[i] = mag_op_attr_empty();
 }
 
 #ifdef __cplusplus

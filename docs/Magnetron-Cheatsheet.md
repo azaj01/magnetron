@@ -14,19 +14,19 @@
 
 Magnetron currently supports the following data types, with additional formats planned (e.g. MXFP8).<br>
 
-|   DType   | Type               | Size (bits) | Min value         | Max value        |
+|     DType | Type               | Size (bits) | Min value         | Max value        |
 |----------:|--------------------|------------:|-------------------|------------------|
-| float16   | Floating point     |          16 | $\approx -6.5e4$  | $\approx 6.5e4$  |
-| bfloat16  | Floating point     |          16 | $\approx -3.4e38$ | $\approx 3.4e38$ |
-| float32   | Floating point     |          32 | $\approx -3.4e38$ | $\approx 3.4e38$ |
-| boolean   | Boolean            |           8 | $0$               | $1$              |
-| int8      | Integer (signed)   |           8 | $-2^{7}$          | $2^{7}-1$        |
-| uint8     | Integer (unsigned) |           8 | $0$               | $2^{8}-1$        |
-| int16     | Integer (signed)   |          16 | $-2^{15}$         | $2^{15}-1$       |
-| uint16    | Integer (unsigned) |          16 | $0$               | $2^{16}-1$       |
-| int32     | Integer (signed)   |          32 | $-2^{31}$         | $2^{31}-1$       |
-| uint32    | Integer (unsigned) |          32 | $0$               | $2^{32}-1$       |
-| int64     | Integer (signed)   |          64 | $-2^{63}$         | $2^{63}-1$       |
+|   float16 | Floating point     |          16 | $\approx -6.5e4$  | $\approx 6.5e4$  |
+|  bfloat16 | Floating point     |          16 | $\approx -3.4e38$ | $\approx 3.4e38$ |
+|   float32 | Floating point     |          32 | $\approx -3.4e38$ | $\approx 3.4e38$ |
+|   boolean | Boolean            |           8 | $0$               | $1$              |
+|      int8 | Integer (signed)   |           8 | $-2^{7}$          | $2^{7}-1$        |
+|     uint8 | Integer (unsigned) |           8 | $0$               | $2^{8}-1$        |
+|     int16 | Integer (signed)   |          16 | $-2^{15}$         | $2^{15}-1$       |
+|    uint16 | Integer (unsigned) |          16 | $0$               | $2^{16}-1$       |
+|     int32 | Integer (signed)   |          32 | $-2^{31}$         | $2^{31}-1$       |
+|    uint32 | Integer (unsigned) |          32 | $0$               | $2^{32}-1$       |
+|     int64 | Integer (signed)   |          64 | $-2^{63}$         | $2^{63}-1$       |
 
 ### Examples
 
@@ -87,59 +87,61 @@ If you are familiar with PyTorch, think `x.sin()` instead of `torch.sin(x)`.
 
 ## Filling & Mutation
 
-| Method                   | Description                              | Math                                          | Example                         |
-|--------------------------|------------------------------------------|-----------------------------------------------|---------------------------------|
-| `fill_(v)`               | Fill tensor in-place with constant value | $x_i=v$                                       | `x.fill_(0)`                    |
-| `zeros_()`               | In-place fill with zeros                 | $x_i=0$                                       | `x.zeros_()`                    |
-| `ones_()`                | In-place fill with ones                  | $x_i=1$                                       | `x.ones_()`                     |
-| `copy_(y)`               | Copy data from another tensor            | $x=y$                                         | `x.copy_(y)`                    |
-| `masked_fill(mask,v)`    | Replace values where mask is true        | $x_i=v$ if $m_i$                              | `y = x.masked_fill(m,0)`        |
-| `masked_fill_(mask,v)`   | In-place masked fill                     | N/A                                           | `x.masked_fill_(m,0)`           |
-| `uniform_(a,b)`          | Fill with uniform random values          | $x\sim U(a,b)$                                | `x.uniform_(0,1)`               |
-| `normal_(μ,σ)`           | Fill with normal distribution            | $x\sim\mathcal N(\mu,\sigma)$                 | `x.normal_(0,1)`                |
-| `bernoulli_(p)`          | Fill with Bernoulli samples              | $x\sim\text{Bern}(p)$                         | `x.bernoulli_(0.5)`             |
-| `Tensor.where(cond,x,y)` | Conditional elementwise selection        | $z_i = x_i \text{ if } c_i \text{ else } y_i$ | `z = Tensor.where(x > 0, x, 0)` |
+| Method                   | Description                              | Math                                                | Example                         |
+|--------------------------|------------------------------------------|-----------------------------------------------------|---------------------------------|
+| `fill_(v)`               | Fill tensor in-place with constant value | $x_i=v$                                             | `x.fill_(0)`                    |
+| `zeros_()`               | In-place fill with zeros                 | $x_i=0$                                             | `x.zeros_()`                    |
+| `ones_()`                | In-place fill with ones                  | $x_i=1$                                             | `x.ones_()`                     |
+| `copy_(y)`               | Copy data from another tensor            | $x=y$                                               | `x.copy_(y)`                    |
+| `masked_fill(mask,v)`    | Replace values where mask is true        | $x_i=v$ if $m_i$                                    | `y = x.masked_fill(m,0)`        |
+| `masked_fill_(mask,v)`   | In-place masked fill                     | N/A                                                 | `x.masked_fill_(m,0)`           |
+| `uniform_(a,b)`          | Fill with uniform random values          | $x\sim U(a,b)$                                      | `x.uniform_(0,1)`               |
+| `normal_(μ,σ)`           | Fill with normal distribution            | $x\sim\mathcal N(\mu,\sigma)$                       | `x.normal_(0,1)`                |
+| `bernoulli_(p)`          | Fill with Bernoulli samples              | $x\sim\text{Bern}(p)$                               | `x.bernoulli_(0.5)`             |
+| `Tensor.where(cond,x,y)` | Conditional elementwise selection        | $z_i = x_i \text{ if } c_i \text{ else } y_i$       | `z = Tensor.where(x > 0, x, 0)` |
+| `clamp(min,max)`         | Clamp values into an interval            | $y_i=\min(\max(x_i,\mathrm{min}_i),\mathrm{max}_i)$ | `y = x.clamp(-1, 1)`            |
 
 ---
 
 ## Shape, Views & Indexing
 
-| Method              | Description                           | Math            | Example                 |
-|---------------------|---------------------------------------|-----------------|-------------------------|
-| `clone()`           | Create a deep copy of the tensor      | N/A             | `y = x.clone()`         |
-| `view(shape)`       | Create a view with new shape          | N/A             | `x.view(2, -1)`         |
-| `view_slice(d,s,l)` | Slice tensor without copying          | $x[s:s+l]$      | `x.view_slice(0,0,4)`   |
-| `reshape(shape)`    | Reshape tensor (may copy)             | N/A             | `x.reshape(4,3)`        |
-| `transpose(a,b)`    | Swap two dimensions                   | $x^T$           | `x.transpose(0,1)`      |
-| `permute(dims)`     | Reorder dimensions arbitrarily        | N/A             | `x.permute(1,0,2)`      |
-| `contiguous()`      | Ensure tensor is contiguous in memory | N/A             | `x = x.contiguous()`    |
-| `squeeze()`         | Remove dimensions of size 1           | N/A             | `x.squeeze()`           |
-| `unsqueeze(d)`      | Insert new dimension                  | N/A             | `x.unsqueeze(0)`        |
-| `flatten(a,b)`      | Flatten a range of dimensions         | N/A             | `x.flatten(1)`          |
-| `unflatten(s)`      | Expand flattened dimension            | N/A             | `x.unflatten((2,3))`    |
-| `narrow(d,s,l)`     | Take slice along dimension            | N/A             | `x.narrow(1,0,4)`       |
-| `movedim(a,b)`      | Move dimension to new position        | N/A             | `x.movedim(0,-1)`       |
-| `select(d,i)`       | Select single index along dim         | $x[...,i]$      | `x.select(1,2)`         |
-| `split(n,d)`        | Split tensor into chunks              | N/A             | `x.split(4,1)`          |
-| `cat(xs,d)`         | Concatenate tensors                   | N/A             | `Tensor.cat([a,b],1)`   |
-| `gather(d,idx)`     | Gather elements by index tensor       | $y_i=x_{idx_i}$ | `x.gather(1,idx)`       |
+| Method              | Description                                  | Math                  | Example               |
+|---------------------|----------------------------------------------|-----------------------|-----------------------|
+| `clone()`           | Create a deep copy of the tensor             | N/A                   | `y = x.clone()`       |
+| `copy_(src)`        | Copy data from src into this tensor in-place | $self \leftarrow src$ | `x.copy_(y)`          |
+| `view(shape)`       | Create a view with new shape                 | N/A                   | `x.view(2, -1)`       |
+| `view_slice(d,s,l)` | Slice tensor without copying                 | $x[s:s+l]$            | `x.view_slice(0,0,4)` |
+| `reshape(shape)`    | Reshape tensor (may copy)                    | N/A                   | `x.reshape(4,3)`      |
+| `transpose(a,b)`    | Swap two dimensions                          | $x^T$                 | `x.transpose(0,1)`    |
+| `permute(dims)`     | Reorder dimensions arbitrarily               | N/A                   | `x.permute(1,0,2)`    |
+| `contiguous()`      | Ensure tensor is contiguous in memory        | N/A                   | `x = x.contiguous()`  |
+| `squeeze()`         | Remove dimensions of size 1                  | N/A                   | `x.squeeze()`         |
+| `unsqueeze(d)`      | Insert new dimension                         | N/A                   | `x.unsqueeze(0)`      |
+| `flatten(a,b)`      | Flatten a range of dimensions                | N/A                   | `x.flatten(1)`        |
+| `unflatten(s)`      | Expand flattened dimension                   | N/A                   | `x.unflatten((2,3))`  |
+| `narrow(d,s,l)`     | Take slice along dimension                   | N/A                   | `x.narrow(1,0,4)`     |
+| `movedim(a,b)`      | Move dimension to new position               | N/A                   | `x.movedim(0,-1)`     |
+| `select(d,i)`       | Select single index along dim                | $x[...,i]$            | `x.select(1,2)`       |
+| `split(n,d)`        | Split tensor into chunks                     | N/A                   | `x.split(4,1)`        |
+| `cat(xs,d)`         | Concatenate tensors                          | N/A                   | `Tensor.cat([a,b],1)` |
+| `gather(d,idx)`     | Gather elements by index tensor              | $y_i=x_{idx_i}$       | `x.gather(1,idx)`     |
 
 ---
 
 ## Reductions
 
-| Method                                       | Description                       | Math                                                                          | Example                       |
-|----------------------------------------------|-----------------------------------|-------------------------------------------------------------------------------|-------------------------------|
-| `mean(dim=-1)`                               | Compute mean over elements        | $\frac1N\sum x$                                                               | `x.mean()`                    |
-| `sum(dim=-1)`                                | Sum elements                      | $\sum x$                                                                      | `x.sum()`                     |
-| `prod(dim=-1)`                               | Product of elements               | $\prod x$                                                                     | `x.prod()`                    |
-| `min(dim=-1)`                                | Minimum value                     | $\min(x)$                                                                     | `x.min()`                     |
-| `max(dim=-1)`                                | Maximum value                     | $\max(x)$                                                                     | `x.max()`                     |
-| `argmin(dim=-1)`                             | Index of minimum                  | $\arg\min(x)$                                                                 | `x.argmin()`                  |
-| `argmax(dim=-1)`                             | Index of maximum                  | $\arg\max(x)$                                                                 | `x.argmax()`                  |
-| `any(dim=-1)`                                | True if any element is non-zero   | $\exists x_i\neq0$                                                            | `x.any()`                     |
-| `all(dim=-1)`                                | True if all elements are non-zero | $\forall x_i\neq0$                                                            | `x.all()`                     |
-| `topk(k, dim=-1, largest=True, sorted=True)` | Select k largest values           | $ \mathrm{topk}(x,k)=\{(x_{i_j},i_j)\}_{j=1}^k,\;x_{i_1}\ge\dots\ge x_{i_k} $ | `values, indices = x.topk(k)` |
+| Method                                       | Description                                                        | Math                                                                          | Example                       |
+|----------------------------------------------|--------------------------------------------------------------------|-------------------------------------------------------------------------------|-------------------------------|
+| `mean(dim=-1)`                               | Compute mean over elements                                         | $\frac1N\sum x$                                                               | `x.mean()`                    |
+| `sum(dim=-1)`                                | Sum elements                                                       | $\sum x$                                                                      | `x.sum()`                     |
+| `prod(dim=-1)`                               | Product of elements                                                | $\prod x$                                                                     | `x.prod()`                    |
+| `min(dim=None, keepdim=False)`               | Reduction minimum, or elementwise min if argument is tensor/scalar | $\min(x)$ / $\min(x,y)$                                                       | `x.min()` / `x.min(y)`        |
+| `max(dim=None, keepdim=False)`               | Reduction maximum, or elementwise max if argument is tensor/scalar | $\max(x)$ / $\max(x,y)$                                                       | `x.max()` / `x.max(y)`        |                                                                | `x.max()`                     |
+| `argmin(dim=-1)`                             | Index of minimum                                                   | $\arg\min(x)$                                                                 | `x.argmin()`                  |
+| `argmax(dim=-1)`                             | Index of maximum                                                   | $\arg\max(x)$                                                                 | `x.argmax()`                  |
+| `any(dim=-1)`                                | True if any element is non-zero                                    | $\exists x_i\neq0$                                                            | `x.any()`                     |
+| `all(dim=-1)`                                | True if all elements are non-zero                                  | $\forall x_i\neq0$                                                            | `x.all()`                     |
+| `topk(k, dim=-1, largest=True, sorted=True)` | Select k largest values                                            | $ \mathrm{topk}(x,k)=\{(x_{i_j},i_j)\}_{j=1}^k,\;x_{i_1}\ge\dots\ge x_{i_k} $ | `values, indices = x.topk(k)` |
 
 ---
 
@@ -191,16 +193,19 @@ If you are familiar with PyTorch, think `x.sin()` instead of `torch.sin(x)`.
 
 ## Binary Arithmetic
 
-| Method       | Operator | Description                | Math                        | Example  |
-|--------------|----------|----------------------------|-----------------------------|----------|
-| `add()`      | `+`      | Elementwise addition       | $x+y$                       | `x + y`  |
-| `sub()`      | `-`      | Elementwise subtraction    | $x-y$                       | `x - y`  |
-| `mul()`      | `*`      | Elementwise multiplication | $x\cdot y$                  | `x * y`  |
-| `div()`      | `/`      | Elementwise division       | $\frac{x}{y}$               | `x / y`  |
-| `floordiv()` | `//`     | Elementwise floor division | $\lfloor\frac{x}{y}\rfloor$ | `x // y` |
-| `mod()`      | `%`      | Elementwise modulus        | $x\bmod y$                  | `x % y`  |
-| `pow()`      | `**`     | Elementwise exponentiation | $x^y$                       | `x ** y` |
-| `matmul()`   | `@`      | Matrix multiplication      | $XY$                        | `x @ y`  |
+| Method                    | Operator | Description                                   | Math                                              | Example                     |
+|---------------------------|----------|-----------------------------------------------|---------------------------------------------------|-----------------------------|
+| `add()`                   | `+`      | Elementwise addition                          | $x+y$                                             | `x + y`                     |
+| `sub()`                   | `-`      | Elementwise subtraction                       | $x-y$                                             | `x - y`                     |
+| `mul()`                   | `*`      | Elementwise multiplication                    | $x\cdot y$                                        | `x * y`                     |
+| `div()`                   | `/`      | Elementwise division                          | $\frac{x}{y}$                                     | `x / y`                     |
+| `floordiv()`              | `//`     | Elementwise floor division                    | $\lfloor\frac{x}{y}\rfloor$                       | `x // y`                    |
+| `mod()`                   | `%`      | Elementwise modulus                           | $x\bmod y$                                        | `x % y`                     |
+| `pow()`                   | `**`     | Elementwise exponentiation                    | $x^y$                                             | `x ** y`                    |
+| `matmul()`                | `@`      | Matrix multiplication                         | $XY$                                              | `x @ y`                     |
+| `scaled_matmul(w, scale)` | N/A      | Matrix multiplication with output/input scale | $XY\cdot s$ or implementation-defined scaled GEMM | `x.scaled_matmul(w, scale)` |
+| `min(y)`                  | N/A      | Elementwise minimum                           | $\min(x,y)$                                       | `x.min(y)`                  |
+| `max(y)`                  | N/A      | Elementwise maximum                           | $\max(x,y)$                                       | `x.max(y)`                  |
 
 ## Comparison
 

@@ -8,10 +8,12 @@ from bench_tool import (
     generate_square_shapes,
 )
 
-import magnetron as mag
+from magnetron import *
 import numpy as np
 import torch
 
+context.set_default_dtype(dtype.bfloat16)
+torch.set_default_dtype(torch.bfloat16)
 
 class NumpyBenchmark(BenchParticipant):
     def __init__(self) -> None:
@@ -39,8 +41,8 @@ class MagnetronBenchmark(BenchParticipant):
         super().__init__('Magnetron')
 
     def allocate_args(self, shape_a: tuple[int, int], shape_b: tuple[int, int]) -> None:
-        x = mag.Tensor.full(shape_a, fill_value=1.0, dtype=mag.float32)
-        y = mag.Tensor.full(shape_b, fill_value=2.0, dtype=mag.float32)
+        x = Tensor.full(shape_a, fill_value=1.0, dtype=dtype.float32)
+        y = Tensor.full(shape_b, fill_value=2.0, dtype=dtype.float32)
         return x, y
 
 

@@ -19,9 +19,9 @@ extern "C" {
 #endif
 
 typedef struct mag_coords_t {
-    int64_t rank;
-    int64_t shape[MAG_MAX_DIMS];
-    int64_t strides[MAG_MAX_DIMS];
+  int64_t rank;
+  int64_t shape[MAG_MAX_DIMS];
+  int64_t strides[MAG_MAX_DIMS];
 } mag_coords_t;
 
 #define MAG_FMT_DIM_BUF_SIZE (8 + MAG_MAX_DIMS*sizeof("-9223372036854775808, "))
@@ -37,6 +37,13 @@ extern bool mag_coords_contiguous(const mag_coords_t *x);
 extern MAG_EXPORT void mag_fmt_shape(char (*buf)[MAG_FMT_DIM_BUF_SIZE], const int64_t (*dims)[MAG_MAX_DIMS], int64_t rank);
 extern MAG_EXPORT bool mag_solve_view_strides(int64_t (*out)[MAG_MAX_DIMS], const int64_t *osz, const int64_t *ost, int64_t ork, const int64_t *nsz, int64_t nrk);
 extern MAG_EXPORT bool mag_infer_missing_dim(int64_t (*out)[MAG_MAX_DIMS], const int64_t *dims, int64_t rank, int64_t numel);
+
+typedef enum mag_mat_layout_type_t {
+  MAG_MAT_LAYOUT_TYPE_PACKED,
+  MAG_MAT_LAYOUT_TYPE_TRANSPOSED,
+  MAG_MAT_LAYOUT_TYPE_OTHER
+} mag_mat_layout_type_t;
+extern MAG_EXPORT mag_mat_layout_type_t mag_mat_layout_detect(const mag_coords_t *coords, bool *out_batch_packed);
 
 #ifdef __cplusplus
 }

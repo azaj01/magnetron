@@ -45,11 +45,11 @@ mag_static_assert(sizeof(mag_bfloat16_t) == 2);
 ** Magnetron's CPU backend contains optimized versions of these functions using SIMD instructions.
 */
 static MAG_AINLINE mag_bfloat16_t mag_bfloat16_from_float32_soft_fp(float x) {
-    union { float f32; uint32_t u32; } f32u32 = {.f32=x};
-    if ((f32u32.u32 & 0x7fffffffu) > 0x7f800000u)
-        return MAG_BFLOAT16_NAN;
-    uint32_t bias = 0x7fffu + ((f32u32.u32>>16) & 1u);
-    return (mag_bfloat16_t){(uint16_t)((f32u32.u32+bias)>>16)};
+  union { float f32; uint32_t u32; } f32u32 = {.f32=x};
+  if ((f32u32.u32 & 0x7fffffffu) > 0x7f800000u)
+    return MAG_BFLOAT16_NAN;
+  uint32_t bias = 0x7fffu + ((f32u32.u32>>16) & 1u);
+  return (mag_bfloat16_t){(uint16_t)((f32u32.u32+bias)>>16)};
 }
 
 /*
@@ -59,9 +59,9 @@ static MAG_AINLINE mag_bfloat16_t mag_bfloat16_from_float32_soft_fp(float x) {
 ** Magnetron's CPU backend contains optimized versions of these functions using SIMD instructions.
 */
 static MAG_AINLINE float mag_bfloat16_to_float32_soft_fp(mag_bfloat16_t x) {
-    union { float f32; uint32_t u32; } f32u32 = {.u32=x.bits};
-    f32u32.u32 <<= 16;
-    return f32u32.f32;
+  union { float f32; uint32_t u32; } f32u32 = {.u32=x.bits};
+  f32u32.u32 <<= 16;
+  return f32u32.f32;
 }
 
 #ifdef __cplusplus

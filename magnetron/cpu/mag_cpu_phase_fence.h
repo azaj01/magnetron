@@ -19,8 +19,8 @@ extern "C" {
 #endif
 
 typedef struct mag_phase_fence_t {
-    mag_atomic32_t phase;
-    mag_atomic32_t remaining;
+  mag_atomic32_t phase;
+  mag_atomic32_t remaining;
 } mag_phase_fence_t;
 
 extern void mag_phase_fence_init(mag_phase_fence_t *fence);

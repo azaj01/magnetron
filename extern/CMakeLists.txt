@@ -17,3 +17,6 @@ endif()
 
 #======================= stb =======================
 target_include_directories(magnetron_core PRIVATE stb)
+
+#======================= dr_libs =======================
+target_include_directories(magnetron_core PRIVATE dr_libs)

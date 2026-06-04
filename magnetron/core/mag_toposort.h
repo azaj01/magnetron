@@ -22,9 +22,9 @@ extern "C" {
 #define MAG_TOPOSORT_STACK_INIT_CAP 512
 
 typedef struct mag_topo_set_t {
-    mag_tensor_t **data;
-    size_t size;
-    size_t capacity;
+  mag_tensor_t **data;
+  size_t size;
+  size_t capacity;
 } mag_topo_set_t;
 
 extern void mag_topo_set_init(mag_topo_set_t *ts);

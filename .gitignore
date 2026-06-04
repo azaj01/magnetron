@@ -30,3 +30,4 @@ perf.data
 uv.lock
 profile.html
 docs/cpp
+data/

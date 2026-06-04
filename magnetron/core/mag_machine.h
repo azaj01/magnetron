@@ -19,22 +19,24 @@ extern "C" {
 #endif
 
 typedef struct mag_machine_info_t {
-    char os_name[128];                      /* OS name. */
-    char cpu_name[128];                     /* CPU name. */
-    uint32_t cpu_virtual_cores;             /* Virtual CPUs. */
-    uint32_t cpu_physical_cores;            /* Physical CPU cores. */
-    uint32_t cpu_sockets;                   /* CPU sockets. */
-    size_t cpu_l1_size;                    /* L1 data cache size in bytes. */
-    size_t cpu_l2_size;                     /* L2 cache size in bytes. */
-    size_t cpu_l3_size;                     /* L3 cache size in bytes. */
-    size_t phys_mem_total;                  /* Total physical memory in bytes. */
-    size_t phys_mem_free;                   /* Free physical memory in bytes. */
+  char os_name[128];                      /* OS name. */
+  char cpu_name[128];                     /* CPU name. */
+  uint32_t cpu_virtual_cores;             /* Virtual CPUs. */
+  uint32_t cpu_physical_cores;            /* Physical CPU cores. */
+  uint32_t cpu_sockets;                   /* CPU sockets. */
+  size_t cpu_l1_size;                    /* L1 data cache size in bytes. */
+  size_t cpu_l2_size;                     /* L2 cache size in bytes. */
+  size_t cpu_l3_size;                     /* L3 cache size in bytes. */
+  size_t phys_mem_total;                  /* Total physical memory in bytes. */
+  size_t phys_mem_free;                   /* Free physical memory in bytes. */
 #if defined(__x86_64__) || defined(_M_X64)
-    mag_amd64_cap_bitset_t amd64_cpu_caps;  /* x86-64 CPU capability bits. */
-    uint32_t amd64_avx10_ver;               /* x86-64 AVX10 version. */
+  mag_amd64_cap_bitset_t amd64_cpu_caps;  /* x86-64 CPU capability bits. */
+  uint32_t amd64_avx10_ver;               /* x86-64 AVX10 version. */
 #elif defined (__aarch64__) || defined(_M_ARM64)
-    mag_arm64_cap_bitset_t arm64_cpu_caps;  /* ARM64 CPU features. */
-    int64_t arm64_cpu_sve_width;            /* ARM64 SVE vector register width. */
+  mag_arm64_cap_bitset_t arm64_cpu_caps;  /* ARM64 CPU features. */
+  int64_t arm64_cpu_sve_width;            /* ARM64 SVE vector register width. */
+#elif defined(__loongarch64)
+  mag_loongarch64_cap_bitset_t loongarch64_cpu_caps; /* Loongson / Godson CPU features */
 #endif
 } mag_machine_info_t;
 

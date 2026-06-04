@@ -20,11 +20,11 @@ extern "C" {
 
 /* Header for all objects that are reference counted. */
 typedef struct mag_rc_control_block_t {
-    #ifdef MAG_DEBUG
-        uint32_t __sentinel;
-    #endif
-    volatile mag_atomic32_t rc_strong; /* Strong atomic RC */
-    mag_status_t (*dtor)(void *); /* Destructor (required). */
+  #ifdef MAG_DEBUG
+    uint32_t __sentinel;
+  #endif
+  volatile mag_atomic32_t rc_strong; /* Strong atomic RC */
+  mag_status_t (*dtor)(void *); /* Destructor (required). */
 } mag_rc_control_block_t;
 
 #ifdef MAG_DEBUG
@@ -36,37 +36,37 @@ mag_static_assert(offsetof(mag_rc_control_block_t, __sentinel) == 0);
 
 /* Initialize reference count header for a new object. Object must have MAG_RC_INJECT_HEADER as first field. */
 static inline void mag_rc_init_object(void *obj, mag_status_t (*dtor)(void *)) {
-    mag_rc_control_block_t *rc = (mag_rc_control_block_t *)obj;
-    mag_atomic32_store(&rc->rc_strong, 1, MAG_MO_RELAXED);
-    rc->dtor = dtor;
-    #ifdef MAG_DEBUG
-        rc->__sentinel = 0xDEADBEEF;
-    #endif
+  mag_rc_control_block_t *rc = (mag_rc_control_block_t *)obj;
+  mag_atomic32_store(&rc->rc_strong, 1, MAG_MO_RELAXED);
+  rc->dtor = dtor;
+  #ifdef MAG_DEBUG
+    rc->__sentinel = 0xDEADBEEF;
+  #endif
 }
 
 /* Increment reference count (retain). Object must have MAG_RC_INJECT_HEADER as first field. */
 static MAG_AINLINE void mag_rc_incref(void *obj) {
-    mag_rc_control_block_t *rc = (mag_rc_control_block_t *)obj;
-    #ifdef MAG_DEBUG /* Verify that object has a valid control block header using the sentinel */
-        mag_assert2(rc->__sentinel == 0xDEADBEEF);
-    #endif
-    mag_atomic32_t prev = mag_atomic32_fetch_add(&rc->rc_strong, 1, MAG_MO_RELAXED);
-    mag_assert(prev < INT32_MAX, "RC inc/dec imbalance detected"); /* Catch overflow */
+  mag_rc_control_block_t *rc = (mag_rc_control_block_t *)obj;
+  #ifdef MAG_DEBUG /* Verify that object has a valid control block header using the sentinel */
+    mag_assert2(rc->__sentinel == 0xDEADBEEF);
+  #endif
+  mag_atomic32_t prev = mag_atomic32_fetch_add(&rc->rc_strong, 1, MAG_MO_RELAXED);
+  mag_assert(prev < INT32_MAX, "RC inc/dec imbalance detected"); /* Catch overflow */
 }
 
 /* Decrement reference count (release). Object must have MAG_RC_INJECT_HEADER as first field. */
 static MAG_AINLINE bool mag_rc_decref(void *obj) {
-    mag_rc_control_block_t *rc = (mag_rc_control_block_t *)obj;
-    #ifdef MAG_DEBUG /* Verify that object has a valid control block header using the sentinel */
-        mag_assert2(rc->__sentinel == 0xDEADBEEF);
-    #endif
-    mag_atomic32_t prev = mag_atomic32_fetch_sub(&rc->rc_strong, 1, MAG_MO_ACQ_REL);
-    mag_assert(prev > 0, "RC inc/dec imbalance detected"); /* Catch underflow */
-    if (mag_unlikely(1 == prev)) { /* Decref and invoke destructor. */
-        (*rc->dtor)(obj);
-        return true; /* Object was destroyed. */
-    }
-    return false;
+  mag_rc_control_block_t *rc = (mag_rc_control_block_t *)obj;
+  #ifdef MAG_DEBUG /* Verify that object has a valid control block header using the sentinel */
+    mag_assert2(rc->__sentinel == 0xDEADBEEF);
+  #endif
+  mag_atomic32_t prev = mag_atomic32_fetch_sub(&rc->rc_strong, 1, MAG_MO_ACQ_REL);
+  mag_assert(prev > 0, "RC inc/dec imbalance detected"); /* Catch underflow */
+  if (mag_unlikely(1 == prev)) { /* Decref and invoke destructor. */
+    (*rc->dtor)(obj);
+    return true; /* Object was destroyed. */
+  }
+  return false;
 }
 
 #ifdef __cplusplus

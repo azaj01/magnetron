@@ -20,9 +20,9 @@ extern "C" {
 
 /* Dynamic zero-terminated string buffer. */
 typedef struct mag_sstream_t {
-    char *buf;
-    size_t len;
-    size_t cap;
+  char *buf;
+  size_t len;
+  size_t cap;
 } mag_sstream_t;
 
 extern void mag_sstream_init(mag_sstream_t *ss);

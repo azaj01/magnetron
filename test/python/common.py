@@ -6,7 +6,7 @@ import itertools
 import multiprocessing
 import random
 import pytest
-from typing import Any, Iterator
+from typing import Any, Iterator, Callable
 
 import torch
 import numpy as np
@@ -16,6 +16,18 @@ from collections import deque
 # Give torch 1//4 of the total cores to not overload the CPU with inner parallelism threads + parallel spawned pytests
 torch.set_num_threads(max(4, multiprocessing.cpu_count() // 8))
 torch.set_num_interop_threads(max(4, multiprocessing.cpu_count() // 8))
+
+AVAILABLE_DEVICES: set[str] = {
+    'cpu',
+    'cuda'
+}
+
+# Filter by which are actually available
+AVAILABLE_DEVICES = {
+    device for device in AVAILABLE_DEVICES
+    if context.is_device_available(device)
+}
+print(AVAILABLE_DEVICES)
 
 # The operator tests test many many shape permutations.
 # To speed up testing, set this to True to only test a base set of shapes.
@@ -65,7 +77,10 @@ def tonumpy_dtype(dtype: dtype.DType) -> np.dtype:
 def totorch(obj: Tensor | int | float | bool, dtype: torch.dtype | None = None) -> torch.Tensor:
     if isinstance(obj, torch.Tensor):
         return obj.to(dtype) if dtype is not None else obj
-    if not isinstance(obj, Tensor):
+    if isinstance(obj, Tensor):
+        if obj.device != 'cpu:0':
+            obj = obj.transfer('cpu:0')
+    else:
         return torch.tensor(obj, dtype=dtype) if dtype is not None else torch.tensor(obj)
     if dtype is None:
         dtype = totorch_dtype(obj.dtype)
@@ -129,12 +144,12 @@ def matmul_shape_pairs(lim: int, max_total_rank: int = 6) -> Iterator[tuple[tupl
                             shape_B = (*batched, K, N)
                             yield shape_A, shape_B
 
-def random_tensor(shape: tuple[int, ...], dtype: dtype.DType) -> Tensor:
-    if dtype == boolean:
+def random_tensor(shape: tuple[int, ...], dt: dtype.DType, device: str ='cpu') -> Tensor:
+    if dt == dtype.boolean:
         return Tensor.bernoulli(shape)
     else:
-        lim = 100 if dtype.is_integer else 1.0
-        return Tensor.uniform(shape, low=-lim, high=lim, dtype=dtype)
+        lim = 100 if dt.is_integer else 1.0
+        return Tensor.uniform(shape, low=-lim, high=lim, dtype=dt, device=device)
 
 DETAILED_TEST_SHAPES: tuple[tuple[int, ...], ...] = (
     (),
@@ -432,7 +447,7 @@ BASE_TEST_SHAPES: tuple[tuple[int, ...], ...] = (
     (21, 5),
 )
 
-def for_all_shapes(f: Callable[tuple[int, ...]]) -> None:
+def for_all_shapes(f: Callable[[tuple[int, ...]], None]) -> None:
     shapes = BASE_TEST_SHAPES if SHAPE_TEST_FAST else DETAILED_TEST_SHAPES
     for shape in shapes:
         f(shape)

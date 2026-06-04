@@ -22,23 +22,23 @@
 extern "C" {
 #endif
 
-    /* Tensor specific flags. */
+  /* Tensor specific flags. */
 typedef enum mag_tensor_flags_t {
-    MAG_TFLAG_NONE = 0,
-    MAG_TFLAG_IS_VIEW = 1<<0,           /* Tensor is a view. */
-    MAG_TFLAG_IS_GRAD = 1<<1,           /* Tensor is a gradient. */
-    MAG_TFLAG_REQUIRES_GRAD = 1<<2,     /* Tensor requires gradient. */
+  MAG_TFLAG_NONE = 0,
+  MAG_TFLAG_IS_VIEW = 1<<0,           /* Tensor is a view. */
+  MAG_TFLAG_IS_GRAD = 1<<1,           /* Tensor is a gradient. */
+  MAG_TFLAG_REQUIRES_GRAD = 1<<2,     /* Tensor requires gradient. */
 
-    MAG_TFLAG_LEN = 4                   /* Number of flags. */
+  MAG_TFLAG_LEN = 4                   /* Number of flags. */
 } mag_tensor_flags_t;
 mag_static_assert(MAG_TFLAG_LEN <= 8); /* Must fit in one byte */
 
 /* Metadata for view tensors */
 typedef struct mag_view_meta_t {
-    MAG_RC_INJECT_HEADER; /* RC Control block must be first */
+  MAG_RC_INJECT_HEADER; /* RC Control block must be first */
 
-    mag_tensor_t *base;
-    uint32_t version_snapshot;
+  mag_tensor_t *base;
+  uint32_t version_snapshot;
 } mag_view_meta_t;
 MAG_RC_OBJECT_IS_VALID(mag_view_meta_t);
 
@@ -50,23 +50,34 @@ extern mag_view_meta_t *mag_view_meta_alloc(mag_tensor_t *base);
 ** A tensor can be a view, which references the storage buffer of another tensor, but views have their own header too.
 */
 struct mag_tensor_t {
-    MAG_RC_INJECT_HEADER;                           /* RC Control block must be first */
+  MAG_RC_INJECT_HEADER;                           /* RC Control block must be first */
 
-    mag_context_t  *ctx;                            /* Host context. */
-    mag_coords_t coords;                            /* Coords */
-    mag_dtype_t dtype : 8;                          /* Data type of the tensor. */
-    mag_tensor_flags_t flags : 8;                   /* Tensor flags. */
-    mag_storage_buffer_t *storage;                  /* Storage buffer. */
-    int64_t numel;                                  /* Number of elements in the tensor. */
-    int64_t storage_offset;                         /* Offset in elements in the storage buffer for views. */
-    mag_view_meta_t *view_meta;                     /* View metadata, if this is a view. */
-    mag_au_state_t *au_state;                       /* Autodiff state, if gradient recording is active. */
-    uint64_t version;                               /* Version of the tensor. Used for views to detect changes in the base tensor. */
+  mag_context_t  *ctx;                            /* Host context. */
+  mag_coords_t coords;                            /* Coords */
+  mag_dtype_t dtype : 8;                          /* Data type of the tensor. */
+  mag_tensor_flags_t flags : 8;                   /* Tensor flags. */
+  mag_storage_buffer_t *storage;                  /* Storage buffer. */
+  int64_t numel;                                  /* Number of elements in the tensor. */
+  int64_t storage_offset;                         /* Offset in elements in the storage buffer for views. */
+  mag_view_meta_t *view_meta;                     /* View metadata, if this is a view. */
+  mag_au_state_t *au_state;                       /* Autodiff state, if gradient recording is active. */
+  uint64_t version;                               /* Version of the tensor. Used for views to detect changes in the base tensor. */
 #ifdef MAG_DEBUG
-    mag_tensor_t *alive_next;                       /* Next alive tensor used for leak detection. */
+  mag_tensor_t *alive_next;                       /* Next alive tensor used for leak detection. */
 #endif
 };
 MAG_RC_OBJECT_IS_VALID(mag_tensor_t);
+
+extern mag_status_t mag_tensor_init(
+  mag_error_t *err,
+  mag_tensor_t **out,
+  mag_context_t *ctx,
+  mag_storage_buffer_t *storage,
+  mag_dtype_t type,
+  int64_t rank,
+  const int64_t *shape,
+  mag_device_id_t device
+);
 
 extern MAG_EXPORT bool mag_all_shapes_equal_and_contig(const mag_tensor_t **tensors, size_t n); /* Returns true if shapes are equal and all tensors are contigous */
 

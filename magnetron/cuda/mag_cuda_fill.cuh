@@ -14,10 +14,13 @@
 #include "mag_cuda.cuh"
 
 namespace mag {
-    constexpr int FILL_BLOCK_SIZE = 256;
+  constexpr int FILL_BLOCK_SIZE = 256;
 
-    extern void fill_op_fill(const mag_command_t *cmd);
-    extern void fill_op_masked_fill(const mag_command_t *cmd);
-    extern void fill_op_fill_rand_uniform(const mag_command_t *cmd);
-    extern void fill_op_fill_rand_normal(const mag_command_t *cmd);
+  extern void fill_op_fill(const mag_command_t &cmd);
+  extern void fill_op_masked_fill(const mag_command_t &cmd);
+  extern void fill_op_fill_rand_uniform(const mag_command_t &cmd);
+  extern void fill_op_fill_rand_normal(const mag_command_t &cmd);
+  extern void fill_op_rand_bernoulli(const mag_command_t &cmd);
+  extern void fill_op_rand_perm(const mag_command_t &cmd);
+  extern void fill_op_arange(const mag_command_t &cmd);
 }

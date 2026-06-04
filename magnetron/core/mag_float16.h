@@ -45,22 +45,22 @@ mag_static_assert(sizeof(mag_float16_t) == 2);
 ** Magnetron's CPU backend contains optimized versions of these functions using SIMD instructions.
 */
 static MAG_AINLINE mag_float16_t mag_float16_from_float32_soft_fp(float x) {
-    float sat = fabsf(x) * 0x1.0p+112f;
-    float base = sat * 0x1.0p-110f;
-    union { float f32; uint32_t u32; } f32u32 = {.f32=x};
-    uint32_t w = f32u32.u32;
-    uint32_t shl1_w = w + w;
-    uint32_t sign = w & 0x80000000u;
-    uint32_t bias = shl1_w & 0xff000000u;
-	bias = bias < 0x71000000u ? 0x71000000u : bias;
-    f32u32.u32 = (bias >> 1) + 0x07800000u;
-    base = f32u32.f32 + base;
-    f32u32.f32 = base;
-    uint32_t bits = f32u32.u32;
-    uint32_t exp_bits = (bits >> 13) & 0x00007c00u;
-    uint32_t mantissa_bits = bits & 0x00000fffu;
-    uint32_t nonsign = exp_bits + mantissa_bits;
-    return (mag_float16_t){(uint16_t)((sign >> 16) | (shl1_w > 0xff000000u ? 0x7e00 : nonsign))};
+  float sat = fabsf(x) * 0x1.0p+112f;
+  float base = sat * 0x1.0p-110f;
+  union { float f32; uint32_t u32; } f32u32 = {.f32=x};
+  uint32_t w = f32u32.u32;
+  uint32_t shl1_w = w + w;
+  uint32_t sign = w & 0x80000000u;
+  uint32_t bias = shl1_w & 0xff000000u;
+  bias = bias < 0x71000000u ? 0x71000000u : bias;
+  f32u32.u32 = (bias >> 1) + 0x07800000u;
+  base = f32u32.f32 + base;
+  f32u32.f32 = base;
+  uint32_t bits = f32u32.u32;
+  uint32_t exp_bits = (bits >> 13) & 0x00007c00u;
+  uint32_t mantissa_bits = bits & 0x00000fffu;
+  uint32_t nonsign = exp_bits + mantissa_bits;
+  return (mag_float16_t){(uint16_t)((sign >> 16) | (shl1_w > 0xff000000u ? 0x7e00 : nonsign))};
 }
 
 /*
@@ -70,17 +70,17 @@ static MAG_AINLINE mag_float16_t mag_float16_from_float32_soft_fp(float x) {
 ** Magnetron's CPU backend contains optimized versions of these functions using SIMD instructions.
 */
 static MAG_AINLINE float mag_float16_to_float32_soft_fp(mag_float16_t x) {
-	uint32_t w = (uint32_t)x.bits << 16;
-	uint32_t sign = w & 0x80000000u;
-	uint32_t two_w = w + w;
-	union { float f32; uint32_t u32; } f32u32 = {.u32=(two_w >> 4) + 0x70000000u};
-	f32u32.f32 *= 0x1.0p-112f;
-	uint32_t norm_bits = f32u32.u32;
-	f32u32.u32 = (two_w >> 17) | 0x3f000000u;
-	f32u32.f32 -= 0.5f;
-	uint32_t denorm_bits = f32u32.u32;
-	f32u32.u32 = sign | (two_w < 0x8000000u ? denorm_bits : norm_bits);
-	return f32u32.f32;
+  uint32_t w = (uint32_t)x.bits << 16;
+  uint32_t sign = w & 0x80000000u;
+  uint32_t two_w = w + w;
+  union { float f32; uint32_t u32; } f32u32 = {.u32=(two_w >> 4) + 0x70000000u};
+  f32u32.f32 *= 0x1.0p-112f;
+  uint32_t norm_bits = f32u32.u32;
+  f32u32.u32 = (two_w >> 17) | 0x3f000000u;
+  f32u32.f32 -= 0.5f;
+  uint32_t denorm_bits = f32u32.u32;
+  f32u32.u32 = sign | (two_w < 0x8000000u ? denorm_bits : norm_bits);
+  return f32u32.f32;
 }
 
 #ifdef __cplusplus

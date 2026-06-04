@@ -12,5 +12,5 @@
 #define MAG_BLAS_SPECIALIZATION mag_cpu_blas_specialization_amd64_arrowlake
 #define MAG_BLAS_SPECIALIZATION_FEAT_REQUEST mag_cpu_blas_specialization_amd64_arrowlake_features
 
-#include "../mag_cpu_impl.inl"
+#include "../kernels/mag_cpu_dispatch.h"
 

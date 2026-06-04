@@ -30,10 +30,10 @@ mag_static_assert(sizeof(mag_bitset64_t) == 8);
 
 /* Tensor hashset with linear probing. */
 typedef struct mag_hashset_t {
-    size_t cap;
-    size_t len;
-    mag_bitset64_t *used;
-    const mag_tensor_t **keys;
+  size_t cap;
+  size_t len;
+  mag_bitset64_t *used;
+  const mag_tensor_t **keys;
 } mag_hashset_t;
 #define MAG_HASHSET_FULL ((size_t)-1)
 #define MAG_HASHSET_DUPLICATE ((size_t)-2)

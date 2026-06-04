@@ -6,7 +6,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "magnetron"
-version = "0.1.6"
+version = "0.1.7"
 description = "A compact machine learning runtime for developers who want to understand, control, and optimize the full stack."
 requires-python = ">=3.10"
 readme = "README.md"
@@ -34,7 +34,7 @@ examples = [
     "huggingface_hub"
 ]
 
-test = [
+dev = [
     "ruff",
     "torch",
     "numpy",
@@ -44,13 +44,16 @@ test = [
     "pytest",
     "pytest-xdist",
     "pyinstrument",
-    "rich"
+    "line_profiler",
+    "rich",
+    "tokenizers",
+    "huggingface_hub",
 ]
 
 [tool.scikit-build.cmake.define]
 # Enable / disable backends
 MAGNETRON_ENABLE_BACKEND_CPU = true
-MAGNETRON_ENABLE_BACKEND_CUDA = false
+MAGNETRON_ENABLE_BACKEND_CUDA = true
 
 # Enable / disable features
 MAGNETRON_BUILD_PYTHON_BINDINGS = true # Required for the Python package

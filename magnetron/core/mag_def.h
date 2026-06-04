@@ -48,10 +48,10 @@ extern "C" {
 #define MAG_SEP ,
 #define MAG_GELU_COEFF 0.044715f /* Coefficient for GELU approximation. */
 
-#define MAG_MAX_CPUS 8192
+#define MAG_MAX_CPUS 2048
+#define MAG_MAX_NUMA_NODES 16
 #define MAG_MAX_CPU_TOPO_DEPTH 2
 #define MAG_MAX_CPU_CACHE_DEPTH 10
-#define MAG_MAX_CPU_NUMA_NODES 64
 
 /* Allows compiling code for host and cuda */
 #if defined(__CUDA_ARCH__) && !defined(MAG_CUDA_DEVICE)
@@ -87,76 +87,76 @@ extern "C" {
 
 /* Memory order for atomic operations. */
 typedef enum mag_memory_order_t {
-    MAG_MO_RELAXED = __ATOMIC_RELAXED,
-    MAG_MO_CONSUME = __ATOMIC_CONSUME,
-    MAG_MO_ACQUIRE = __ATOMIC_ACQUIRE,
-    MAG_MO_RELEASE = __ATOMIC_RELEASE,
-    MAG_MO_ACQ_REL = __ATOMIC_ACQ_REL,
-    MAG_MO_SEQ_CST = __ATOMIC_SEQ_CST
+  MAG_MO_RELAXED = __ATOMIC_RELAXED,
+  MAG_MO_CONSUME = __ATOMIC_CONSUME,
+  MAG_MO_ACQUIRE = __ATOMIC_ACQUIRE,
+  MAG_MO_RELEASE = __ATOMIC_RELEASE,
+  MAG_MO_ACQ_REL = __ATOMIC_ACQ_REL,
+  MAG_MO_SEQ_CST = __ATOMIC_SEQ_CST
 } mag_memory_order_t;
 
 typedef int64_t mag_atomic64_t;
 static MAG_AINLINE void mag_atomic64_store(volatile mag_atomic64_t *o, mag_atomic64_t x, mag_memory_order_t order) {
-    __atomic_store_n(o, x, order);
+  __atomic_store_n(o, x, order);
 }
 static MAG_AINLINE mag_atomic64_t mag_atomic64_load(volatile mag_atomic64_t *o, mag_memory_order_t order) {
-    return __atomic_load_n(o, order);
+  return __atomic_load_n(o, order);
 }
 static MAG_AINLINE mag_atomic64_t mag_atomic64_fetch_add(volatile mag_atomic64_t *o, mag_atomic64_t x, mag_memory_order_t order) {
-    return __atomic_fetch_add(o, x, order);
+  return __atomic_fetch_add(o, x, order);
 }
 static MAG_AINLINE mag_atomic64_t mag_atomic64_fetch_sub(volatile mag_atomic64_t *o, mag_atomic64_t x, mag_memory_order_t order) {
-    return __atomic_fetch_sub(o, x, order);
+  return __atomic_fetch_sub(o, x, order);
 }
 static MAG_AINLINE mag_atomic64_t mag_atomic64_fetch_and(volatile mag_atomic64_t *o, mag_atomic64_t x, mag_memory_order_t order) {
-    return __atomic_fetch_and(o, x, order);
+  return __atomic_fetch_and(o, x, order);
 }
 static MAG_AINLINE mag_atomic64_t mag_atomic64_fetch_or(volatile mag_atomic64_t *o, mag_atomic64_t x, mag_memory_order_t order) {
-    return __atomic_fetch_or(o, x, order);
+  return __atomic_fetch_or(o, x, order);
 }
 static MAG_AINLINE mag_atomic64_t mag_atomic64_fetch_xor(volatile mag_atomic64_t *o, mag_atomic64_t x, mag_memory_order_t order) {
-    return __atomic_fetch_xor(o, x, order);
+  return __atomic_fetch_xor(o, x, order);
 }
 static MAG_AINLINE mag_atomic64_t mag_atomic64_exchange(volatile mag_atomic64_t *o, mag_atomic64_t x, mag_memory_order_t order) {
-    return __atomic_exchange_n(o, x, order);
+  return __atomic_exchange_n(o, x, order);
 }
 static MAG_AINLINE bool mag_atomic64_compare_exchange_weak(volatile mag_atomic64_t *o, mag_atomic64_t *exp, mag_atomic64_t *des, mag_memory_order_t order_succ, mag_memory_order_t order_fail) {
-    return __atomic_compare_exchange(o, exp, des, true, order_succ, order_fail);
+  return __atomic_compare_exchange(o, exp, des, true, order_succ, order_fail);
 }
 static MAG_AINLINE bool mag_atomic64_compare_exchange_strong(volatile mag_atomic64_t *o, mag_atomic64_t *exp, mag_atomic64_t *des, mag_memory_order_t order_succ, mag_memory_order_t order_fail) {
-    return __atomic_compare_exchange(o, exp, des, false, order_succ, order_fail);
+  return __atomic_compare_exchange(o, exp, des, false, order_succ, order_fail);
 }
 
 typedef int32_t mag_atomic32_t;
 static MAG_AINLINE void mag_atomic32_store(volatile mag_atomic32_t *o, mag_atomic32_t x, mag_memory_order_t order) {
-    __atomic_store_n(o, x, order);
+  __atomic_store_n(o, x, order);
 }
 static MAG_AINLINE mag_atomic32_t mag_atomic32_load(volatile mag_atomic32_t *o, mag_memory_order_t order) {
-    return __atomic_load_n(o, order);
+  return __atomic_load_n(o, order);
 }
 static MAG_AINLINE mag_atomic32_t mag_atomic32_fetch_add(volatile mag_atomic32_t *o, mag_atomic32_t x, mag_memory_order_t order) {
-    return __atomic_fetch_add(o, x, order);
+  return __atomic_fetch_add(o, x, order);
 }
 static MAG_AINLINE mag_atomic32_t mag_atomic32_fetch_sub(volatile mag_atomic32_t *o, mag_atomic32_t x, mag_memory_order_t order) {
-    return __atomic_fetch_sub(o, x, order);
+  return __atomic_fetch_sub(o, x, order);
 }
 static MAG_AINLINE mag_atomic32_t mag_atomic32_fetch_and(volatile mag_atomic32_t *o, mag_atomic32_t x, mag_memory_order_t order) {
-    return __atomic_fetch_and(o, x, order);
+  return __atomic_fetch_and(o, x, order);
 }
 static MAG_AINLINE mag_atomic32_t mag_atomic32_fetch_or(volatile mag_atomic32_t *o, mag_atomic32_t x, mag_memory_order_t order) {
-    return __atomic_fetch_or(o, x, order);
+  return __atomic_fetch_or(o, x, order);
 }
 static MAG_AINLINE mag_atomic32_t mag_atomic32_fetch_xor(volatile mag_atomic32_t *o, mag_atomic32_t x, mag_memory_order_t order) {
-    return __atomic_fetch_xor(o, x, order);
+  return __atomic_fetch_xor(o, x, order);
 }
 static MAG_AINLINE mag_atomic32_t mag_atomic32_exchange(volatile mag_atomic32_t *o, mag_atomic32_t x, mag_memory_order_t order) {
-    return __atomic_exchange_n(o, x, order);
+  return __atomic_exchange_n(o, x, order);
 }
 static MAG_AINLINE bool mag_atomic32_compare_exchange_weak(volatile mag_atomic32_t *o, mag_atomic32_t *exp, mag_atomic32_t *des, mag_memory_order_t order_succ, mag_memory_order_t order_fail) {
-    return __atomic_compare_exchange(o, exp, des, true, order_succ, order_fail);
+  return __atomic_compare_exchange(o, exp, des, true, order_succ, order_fail);
 }
 static MAG_AINLINE bool mag_atomic32_compare_exchange_strong(volatile mag_atomic32_t *o, mag_atomic32_t *exp, mag_atomic32_t *des, mag_memory_order_t order_succ, mag_memory_order_t order_fail) {
-    return __atomic_compare_exchange(o, exp, des, false, order_succ, order_fail);
+  return __atomic_compare_exchange(o, exp, des, false, order_succ, order_fail);
 }
 
 /* Compiler specific macros and utils for MSVC. */
@@ -179,148 +179,148 @@ unsigned char _BitScanReverse64(unsigned long *, unsigned __int64);
 #define mag_likely(x) (x)
 #define mag_unlikely(x) (x)
 static MAG_AINLINE uint32_t mag_ffs(uint32_t x) {
-    unsigned long r;
-    _BitScanForward(&r, x);
-    return (uint32_t)r;
+  unsigned long r;
+  _BitScanForward(&r, x);
+  return (uint32_t)r;
 }
 static MAG_AINLINE uint32_t mag_fls(uint32_t x) {
-    unsigned long r;
-    _BitScanReverse(&r, x);
-    return (uint32_t)r;
+  unsigned long r;
+  _BitScanReverse(&r, x);
+  return (uint32_t)r;
 }
 static MAG_AINLINE uint32_t mag_ffs64(uint64_t x) {
-    unsigned long r;
-    _BitScanForward64(&r, x);
-    return (uint32_t)r;
+  unsigned long r;
+  _BitScanForward64(&r, x);
+  return (uint32_t)r;
 }
 static MAG_AINLINE uint32_t mag_fls64(uint64_t x) {
-    unsigned long r;
-    _BitScanReverse64(&r, x);
-    return (uint32_t)r;
+  unsigned long r;
+  _BitScanReverse64(&r, x);
+  return (uint32_t)r;
 }
 #define mag_printf_fmt(str, idx)
 
 typedef enum mag_memory_order_t { /* Atomic memory order. Has no effect with MSVC for now, all operations are sequencial consistent. */
-    MAG_MO_RELAXED,
-    MAG_MO_CONSUME,
-    MAG_MO_ACQUIRE,
-    MAG_MO_RELEASE,
-    MAG_MO_ACQ_REL,
-    MAG_MO_SEQ_CST
+  MAG_MO_RELAXED,
+  MAG_MO_CONSUME,
+  MAG_MO_ACQUIRE,
+  MAG_MO_RELEASE,
+  MAG_MO_ACQ_REL,
+  MAG_MO_SEQ_CST
 } mag_memory_order_t;
 
 typedef long long mag_atomic64_t;
 static MAG_AINLINE void mag_atomic64_store(volatile mag_atomic64_t *o, mag_atomic64_t x, mag_memory_order_t order) {
-    (void)order;
-    _InterlockedExchange64(o, x);
+  (void)order;
+  _InterlockedExchange64(o, x);
 }
 static MAG_AINLINE mag_atomic64_t mag_atomic64_load(volatile mag_atomic64_t *o, mag_memory_order_t order) {
-    (void)order;
-    mag_atomic64_t r;
-    _InterlockedExchange64(&r, *o);
-    return r;
+  (void)order;
+  mag_atomic64_t r;
+  _InterlockedExchange64(&r, *o);
+  return r;
 }
 static MAG_AINLINE mag_atomic64_t mag_atomic64_fetch_add(volatile mag_atomic64_t *o, mag_atomic64_t x, mag_memory_order_t order) {
-    (void)order;
-    return _InterlockedExchangeAdd64(o, x);
+  (void)order;
+  return _InterlockedExchangeAdd64(o, x);
 }
 static MAG_AINLINE mag_atomic64_t mag_atomic64_fetch_sub(volatile mag_atomic64_t *o, mag_atomic64_t x, mag_memory_order_t order) {
-    (void)order;
-    return _InterlockedExchangeAdd64(o, -x);
+  (void)order;
+  return _InterlockedExchangeAdd64(o, -x);
 }
 static MAG_AINLINE mag_atomic64_t mag_atomic64_fetch_and(volatile mag_atomic64_t *o, mag_atomic64_t x, mag_memory_order_t order) {
-    (void)order;
-    return _InterlockedAnd64(o, x);
+  (void)order;
+  return _InterlockedAnd64(o, x);
 }
 static MAG_AINLINE mag_atomic64_t mag_atomic64_fetch_or(volatile mag_atomic64_t *o, mag_atomic64_t x, mag_memory_order_t order) {
-    (void)order;
-    return _InterlockedOr64(o, x);
+  (void)order;
+  return _InterlockedOr64(o, x);
 }
 static MAG_AINLINE mag_atomic64_t mag_atomic64_fetch_xor(volatile mag_atomic64_t *o, mag_atomic64_t x, mag_memory_order_t order) {
-    (void)order;
-    return _InterlockedXor64(o, x);
+  (void)order;
+  return _InterlockedXor64(o, x);
 }
 static MAG_AINLINE mag_atomic64_t mag_atomic64_exchange(volatile mag_atomic64_t *o, mag_atomic64_t x, mag_memory_order_t order) {
-    (void)order;
-    return _InterlockedExchange64(o, x);
+  (void)order;
+  return _InterlockedExchange64(o, x);
 }
 static MAG_AINLINE bool mag_atomic64_compare_exchange_weak(volatile mag_atomic64_t *o, mag_atomic64_t *exp, mag_atomic64_t *des, mag_memory_order_t order_succ, mag_memory_order_t order_fail) {
-    (void)order_succ;
-    (void)order_fail;
-    mag_atomic64_t old = _InterlockedCompareExchange64(o, *des, *exp);
-    if (old == *exp) return true; /* Emulate GCC's weak compare exchange. */
-    else {
-        *exp = old;
-        return false;
-    }
+  (void)order_succ;
+  (void)order_fail;
+  mag_atomic64_t old = _InterlockedCompareExchange64(o, *des, *exp);
+  if (old == *exp) return true; /* Emulate GCC's weak compare exchange. */
+  else {
+    *exp = old;
+    return false;
+  }
 }
 static MAG_AINLINE bool mag_atomic64_compare_exchange_strong(volatile mag_atomic64_t *o, mag_atomic64_t *exp, mag_atomic64_t *des, mag_memory_order_t order_succ, mag_memory_order_t order_fail) {
-    (void)order_succ;
-    (void)order_fail;
-    mag_atomic64_t old = _InterlockedCompareExchange64(o, *des, *exp);
-    if (old == *exp) return true; /* Emulate GCC's weak compare exchange. */
-    else {
-        *exp = old;
-        return false;
-    }
+  (void)order_succ;
+  (void)order_fail;
+  mag_atomic64_t old = _InterlockedCompareExchange64(o, *des, *exp);
+  if (old == *exp) return true; /* Emulate GCC's weak compare exchange. */
+  else {
+    *exp = old;
+    return false;
+  }
 }
 
 #define restrict __restrict
 
 typedef long mag_atomic32_t;
 static MAG_AINLINE void mag_atomic32_store(volatile mag_atomic32_t *o, mag_atomic32_t x, mag_memory_order_t order) {
-    (void)order;
-    _InterlockedExchange(o, x);
+  (void)order;
+  _InterlockedExchange(o, x);
 }
 static MAG_AINLINE mag_atomic32_t mag_atomic32_load(volatile mag_atomic32_t *o, mag_memory_order_t order) {
-    (void)order;
-    mag_atomic32_t r;
-    _InterlockedExchange(&r, *o);
-    return r;
+  (void)order;
+  mag_atomic32_t r;
+  _InterlockedExchange(&r, *o);
+  return r;
 }
 static MAG_AINLINE mag_atomic32_t mag_atomic32_fetch_add(volatile mag_atomic32_t *o, mag_atomic32_t x, mag_memory_order_t order) {
-    (void)order;
-    return _InterlockedExchangeAdd(o, x);
+  (void)order;
+  return _InterlockedExchangeAdd(o, x);
 }
 static MAG_AINLINE mag_atomic32_t mag_atomic32_fetch_sub(volatile mag_atomic32_t *o, mag_atomic32_t x, mag_memory_order_t order) {
-    (void)order;
-    return _InterlockedExchangeAdd(o, -x);
+  (void)order;
+  return _InterlockedExchangeAdd(o, -x);
 }
 static MAG_AINLINE mag_atomic32_t mag_atomic32_fetch_and(volatile mag_atomic32_t *o, mag_atomic32_t x, mag_memory_order_t order) {
-    (void)order;
-    return _InterlockedAnd(o, x);
+  (void)order;
+  return _InterlockedAnd(o, x);
 }
 static MAG_AINLINE mag_atomic32_t mag_atomic32_fetch_or(volatile mag_atomic32_t *o, mag_atomic32_t x, mag_memory_order_t order) {
-    (void)order;
-    return _InterlockedOr(o, x);
+  (void)order;
+  return _InterlockedOr(o, x);
 }
 static MAG_AINLINE mag_atomic32_t mag_atomic32_fetch_xor(volatile mag_atomic32_t *o, mag_atomic32_t x, mag_memory_order_t order) {
-    (void)order;
-    return _InterlockedXor(o, x);
+  (void)order;
+  return _InterlockedXor(o, x);
 }
 static MAG_AINLINE mag_atomic32_t mag_atomic32_exchange(volatile mag_atomic32_t *o, mag_atomic32_t x, mag_memory_order_t order) {
-    (void)order;
-    return _InterlockedExchange(o, x);
+  (void)order;
+  return _InterlockedExchange(o, x);
 }
 static MAG_AINLINE bool mag_atomic32_compare_exchange_weak(volatile mag_atomic32_t *o, mag_atomic32_t *exp, mag_atomic32_t *des, mag_memory_order_t order_succ, mag_memory_order_t order_fail) {
-    (void)order_succ;
-    (void)order_fail;
-    mag_atomic32_t old = _InterlockedCompareExchange(o, *des, *exp);
-    if (old == *exp) return true; /* Emulate GCC's weak compare exchange. */
-    else {
-        *exp = old;
-        return false;
-    }
+  (void)order_succ;
+  (void)order_fail;
+  mag_atomic32_t old = _InterlockedCompareExchange(o, *des, *exp);
+  if (old == *exp) return true; /* Emulate GCC's weak compare exchange. */
+  else {
+    *exp = old;
+    return false;
+  }
 }
 static MAG_AINLINE bool mag_atomic32_compare_exchange_strong(volatile mag_atomic32_t *o, mag_atomic32_t *exp, mag_atomic32_t *des, mag_memory_order_t order_succ, mag_memory_order_t order_fail) {
-    (void)order_succ;
-    (void)order_fail;
-    mag_atomic32_t old = _InterlockedCompareExchange(o, *des, *exp);
-    if (old == *exp) return true; /* Emulate GCC's weak compare exchange. */
-    else {
-        *exp = old;
-        return false;
-    }
+  (void)order_succ;
+  (void)order_fail;
+  mag_atomic32_t old = _InterlockedCompareExchange(o, *des, *exp);
+  if (old == *exp) return true; /* Emulate GCC's weak compare exchange. */
+  else {
+    *exp = old;
+    return false;
+  }
 }
 
 #endif
@@ -391,72 +391,72 @@ mag_static_assert(MAG_CPU_BUF_INTRUSIVE_CAP >= sizeof(void *) && !(MAG_CPU_BUF_I
 
 static uint16_t MAG_AINLINE mag_bswap16(uint16_t x) {
 #if (defined(__GNUC__) && ((__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 3))) || defined(__clang__)
-    x = __builtin_bswap16(x);
+  x = __builtin_bswap16(x);
 #else
-    x = (x&0xff00)>>8 | x&0xff<<8;
+  x = (x&0xff00)>>8 | x&0xff<<8;
 #endif
-    return x;
+  return x;
 }
 static uint32_t MAG_AINLINE mag_bswap32(uint32_t x) {
 #if (defined(__GNUC__) && ((__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 3))) || defined(__clang__)
-    x = __builtin_bswap32(x);
+  x = __builtin_bswap32(x);
 #else
-    x = (x&0xff000000)>>24 |
-        (x&0xff0000)>>8 |
-        (x&0xff00)<<8 |
-        (x&0xff)<<24;
+  x = (x&0xff000000)>>24 |
+    (x&0xff0000)>>8 |
+    (x&0xff00)<<8 |
+    (x&0xff)<<24;
 #endif
-    return x;
+  return x;
 }
 static uint64_t MAG_AINLINE mag_bswap64(uint64_t x) {
 #if (defined(__GNUC__) && ((__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 3))) || defined(__clang__)
-    x = __builtin_bswap64(x);
+  x = __builtin_bswap64(x);
 #else
-    x = (x&0xff00000000000000)>>56 |
-        (x&0xff000000000000)>>40 |
-        (x&0xff0000000000)>>24 |
-        (x&0xff00000000)>>8 |
-        (x&0xff000000)<<8 |
-        (x&0xff0000)<<24 |
-        (x&0xff00)<<40 |
-        (x&0xff)<<56;
+  x = (x&0xff00000000000000)>>56 |
+    (x&0xff000000000000)>>40 |
+    (x&0xff0000000000)>>24 |
+    (x&0xff00000000)>>8 |
+    (x&0xff000000)<<8 |
+    (x&0xff0000)<<24 |
+    (x&0xff00)<<40 |
+    (x&0xff)<<56;
 #endif
-    return x;
+  return x;
 }
 
 static MAG_CUDA_DEVICE MAG_AINLINE uint32_t mag_mulhilo32(uint32_t x, uint32_t y, uint32_t *hi) {
-    #ifdef __CUDA_ARCH__
-        *hi = __umulhi(x, y);
-        return x*y;
-    #else
-        uint64_t p = (uint64_t)x*(uint64_t)y;
-        *hi = p>>32;
-        return (uint32_t)p;
-    #endif
+  #ifdef __CUDA_ARCH__
+    *hi = __umulhi(x, y);
+    return x*y;
+  #else
+    uint64_t p = (uint64_t)x*(uint64_t)y;
+    *hi = p>>32;
+    return (uint32_t)p;
+  #endif
 }
 
 static MAG_AINLINE uint64_t mag_mulhilo64(uint64_t x, uint64_t y) {
 #if defined(_MSC_VER) && (!defined(__clang__) || _MSC_VER > 1930) && (defined(_M_X64) || defined(_M_ARM64))
-    return __umulh(x, y);
+  return __umulh(x, y);
 #elif defined(__SIZEOF_INT128__)
-    unsigned __int128 xl = x, yl = y;
-    unsigned __int128 rl = xl*yl;
-    return (uint64_t)(rl>>64);
+  unsigned __int128 xl = x, yl = y;
+  unsigned __int128 rl = xl*yl;
+  return (uint64_t)(rl>>64);
 #else
-    /* Fastdivmod is slow with this (IPC raise a lot), because we have NO fast compiler intrinsics */
-    uint32_t x0 = (uint32_t)(x&~0u);
-    uint32_t x1 = (uint32_t)(x>>32);
-    uint32_t y0 = (uint32_t)(y&~0u);
-    uint32_t y1 = (uint32_t)(y>>32);
-    uint32_t x0y0_hi;
-    mag_mulhilo32(x0, y0, &x0y0_hi);
-    uint64_t x0y1 = x0*(uint64_t)y1;
-    uint64_t x1y0 = x1*(uint64_t)y0;
-    uint64_t x1y1 = x1*(uint64_t)y1;
-    uint64_t temp = x1y0 + x0y0_hi;
-    uint64_t tlo = temp&~0u;
-    uint64_t thi = temp>>32;
-    return x1y1 + thi + ((tlo + x0y1)>>32);
+  /* Fastdivmod is slow with this (IPC raise a lot), because we have NO fast compiler intrinsics */
+  uint32_t x0 = (uint32_t)(x&~0u);
+  uint32_t x1 = (uint32_t)(x>>32);
+  uint32_t y0 = (uint32_t)(y&~0u);
+  uint32_t y1 = (uint32_t)(y>>32);
+  uint32_t x0y0_hi;
+  mag_mulhilo32(x0, y0, &x0y0_hi);
+  uint64_t x0y1 = x0*(uint64_t)y1;
+  uint64_t x1y0 = x1*(uint64_t)y0;
+  uint64_t x1y1 = x1*(uint64_t)y1;
+  uint64_t temp = x1y0 + x0y0_hi;
+  uint64_t tlo = temp&~0u;
+  uint64_t thi = temp>>32;
+  return x1y1 + thi + ((tlo + x0y1)>>32);
 #endif
 }
 
@@ -487,9 +487,9 @@ extern MAG_EXPORT void mag_log_fmt(mag_log_level_t level, const char *fmt, ...) 
 
 /* Panic and print 'msg' if 'expr' is false. */
 #define mag_assert(expr, msg, ...) \
-    if (mag_unlikely(!(expr))) { \
-        mag_panic("%s:%d Assertion failed: " #expr " <- " msg, __FILE__, __LINE__, ## __VA_ARGS__);\
-    }
+  if (mag_unlikely(!(expr))) { \
+    mag_panic("%s:%d Assertion failed: " #expr " <- " msg, __FILE__, __LINE__, ## __VA_ARGS__);\
+  }
 
 /* Panic if 'expr' is false. */
 #define mag_assert2(expr) mag_assert(expr, "")
@@ -497,14 +497,14 @@ extern MAG_EXPORT void mag_log_fmt(mag_log_level_t level, const char *fmt, ...) 
 #if defined(MAG_DEBUG)
 /* Panics if ptr ∉ [base, base+N). */
 #define mag_bnd_chk(ptr, base, N) \
-    mag_assert((char*)(ptr) >= (char*)(base) && (char*)(ptr) < (char*)(base)+(N), \
-        "\nBound check failed: %p not in [%p, %p), base+0x%x, end+0x%x", \
-        (void *)(ptr), \
-        (void *)(base), \
-        (void *)((char *)(base)+(N)), \
-        abs((int)((intptr_t)(ptr)-(intptr_t)(base))), /* Allow +-2G delta */ \
-        abs((int)(((intptr_t)(base)+(N))-(intptr_t)(ptr))) \
-    )
+  mag_assert((char*)(ptr) >= (char*)(base) && (char*)(ptr) < (char*)(base)+(N), \
+    "\nBound check failed: %p not in [%p, %p), base+0x%x, end+0x%x", \
+    (void *)(ptr), \
+    (void *)(base), \
+    (void *)((char *)(base)+(N)), \
+    abs((int)((intptr_t)(ptr)-(intptr_t)(base))), /* Allow +-2G delta */ \
+    abs((int)(((intptr_t)(base)+(N))-(intptr_t)(ptr))) \
+  )
 
 /* Same as mag_assert but only activated in debug builds. */
 #define mag_dassert mag_assert
@@ -526,64 +526,64 @@ extern MAG_EXPORT void mag_log_fmt(mag_log_level_t level, const char *fmt, ...) 
 '* The 'msg' is a printf-style format string with optional arguments.
 */
 #define mag_contract(E, status, cleanup, expr, msg, ...) \
-    do { \
-        if (mag_unlikely(!(expr))) { \
-            if ((E) != NULL && (E)->code == MAG_STATUS_OK) { \
-                *(E) = (mag_error_t){ \
-                    .code = MAG_STATUS_##status, \
-                    .message = "", \
-                    .file = MAG_SRC_NAME, \
-                    .line = __LINE__, \
-                    .func = __func__, \
-                }; \
-                snprintf((E)->message, sizeof((E)->message), (msg), ##__VA_ARGS__); \
-            } \
-            cleanup; \
-            return MAG_STATUS_##status; \
-        } \
-    } while (0)
+  do { \
+    if (mag_unlikely(!(expr))) { \
+      if ((E) != NULL && (E)->code == MAG_STATUS_OK) { \
+        *(E) = (mag_error_t){ \
+          .code = MAG_STATUS_##status, \
+          .message = "", \
+          .file = MAG_SRC_NAME, \
+          .line = __LINE__, \
+          .func = __func__, \
+        }; \
+        snprintf((E)->message, sizeof((E)->message), (msg), ##__VA_ARGS__); \
+      } \
+      cleanup; \
+      return MAG_STATUS_##status; \
+    } \
+  } while (0)
 
 
 #define mag_try(call) \
-    do { \
-        mag_status_t status____ = (call); \
-        if (mag_iserr(status____)) return status____; \
-    } while (0)
+  do { \
+    mag_status_t status____ = (call); \
+    if (mag_iserr(status____)) return status____; \
+  } while (0)
 
 #define mag_try_or(call, cleanup) \
-    do { \
-        mag_status_t status____ = (call); \
-        if (mag_iserr(status____)) { \
-            cleanup; \
-            return status____; \
-        } \
-    } while (0)
+  do { \
+    mag_status_t status____ = (call); \
+    if (mag_iserr(status____)) { \
+      cleanup; \
+      return status____; \
+    } \
+  } while (0)
 
 extern void MAG_COLDPROC mag_print_separator(FILE *f); /* Print a separator line. */
 
 /* Humanize memory buf_size. Format and convert a memory buf_size to the appropriate unit. For example. 1024 => 1 KiB */
-extern void mag_humanize_memory_size(size_t n, double *out, const char **unit);
-extern uintptr_t mag_thread_id(void); /* Get current native thread ID. */
-extern FILE *mag_fopen(const char *file, const char *mode);
-extern uint64_t mag_hpc_clock_ns(void); /* Get high precision clock in nanoseconds. */
-extern uint64_t mag_hpc_clock_elapsed_ns(uint64_t start);
-extern double mag_hpc_clock_elapsed_ms(uint64_t start);
-extern uint64_t mag_cycles(void); /* Get current CPU cycles. */
+extern MAG_EXPORT void mag_humanize_memory_size(size_t n, double *out, const char **unit);
+extern MAG_EXPORT uintptr_t mag_thread_id(void); /* Get current native thread ID. */
+extern MAG_EXPORT FILE *mag_fopen(const char *file, const char *mode);
+extern MAG_EXPORT uint64_t mag_hpc_clock_ns(void); /* Get high precision clock in nanoseconds. */
+extern MAG_EXPORT uint64_t mag_hpc_clock_elapsed_ns(uint64_t start);
+extern MAG_EXPORT double mag_hpc_clock_elapsed_ms(uint64_t start);
+extern MAG_EXPORT uint64_t mag_cycles(void); /* Get current CPU cycles. */
 
 #define mag_swap(T, a, b) do { T tmp = (a); (a) = (b); (b) = tmp; } while (0)
-#define mag_xmax(x, y) (((x) > (y)) ? (x) : (y))
-#define mag_xmin(x, y) (((x) < (y)) ? (x) : (y))
+#define mag_xmax(x, y) (((x)>(y))?(x):(y))
+#define mag_xmin(x, y) (((x)<(y))?(x):(y))
 #define mag_rd_down(x,m) ((x)/(m) * (m))
-#define mag_clamp(v, lo, hi) ((v) < (lo) ? (lo) : (v) > (hi) ? (hi) : (v))
+#define mag_xclamp(v, lo, hi) ((v) < (lo) ? (lo) : (v) > (hi) ? (hi) : (v))
 
 #define MAG_TAU 6.283185307179586476925286766559005768394338798f /* τ=2π */
 #define MAG_INVSQRT2 0.707106781186547524400844362104849039284835937f /* 1/√2 */
 
 /* Increment pointer or buf_size with correct type alignment. */
 static inline void *mag_pincr(void **p, size_t sz, size_t align) {
-    void *pp = (void *)(((uintptr_t)*p+align-1)&-align);
-    *p = (void *)((uint8_t *)pp+sz);
-    return pp;
+  void *pp = (void *)(((uintptr_t)*p+align-1)&-align);
+  *p = (void *)((uint8_t *)pp+sz);
+  return pp;
 }
 
 /* Performs c = ab with overflow checking. Returns true on overflow, else false. */
@@ -607,6 +607,59 @@ return __builtin_smulll_overflow(a, b, (long long *)c);
 return __builtin_smull_overflow(a, b, c);
 #endif
 #endif
+}
+
+static MAG_CUDA_DEVICE MAG_AINLINE uint32_t mag_next_pow2_u32(uint32_t x) {
+  if (mag_unlikely(x <= 1)) return 1;
+  --x;
+  x |= x>>1;
+  x |= x>>2;
+  x |= x>>4;
+  x |= x>>8;
+  x |= x>>16;
+  return x+1;
+}
+
+static MAG_CUDA_DEVICE MAG_AINLINE uint64_t mag_powu(uint64_t x, uint64_t k) {
+  if (!k) return 1;
+  for (; !(k&1); k >>= 1) x *= x;
+  uint64_t y = x;
+  if (k>>=1) {
+    for (;;) {
+      x *= x;
+      if (k == 1) break;
+      if (k&1) y *= x;
+      k >>= 1;
+    }
+    y *= x;
+  }
+  return y;
+}
+
+static MAG_CUDA_DEVICE MAG_AINLINE int64_t mag_powi(int64_t x, int64_t k) {
+  if (!k) return 1;
+  if (k < 0) {
+    switch (x) {
+      case 0: return UINT64_C(0x7fffffffffffffff);
+      case 1: return 1;
+      case -1: return (k&1) ? -1 : 1;
+      default: return 0;
+    }
+  }
+  return (int64_t)mag_powu((uint64_t)x, (uint64_t)k);
+}
+
+/* Remainder functions that adjust for sign, as in Python and MATLAB. C's % operator does not do this 😿 */
+static MAG_CUDA_DEVICE MAG_AINLINE float mag_remf(float x, float y) {
+  float r = fmodf(x, y);
+  if (r != 0.0f && (r < 0.0f) != (y < 0.0f)) r += y;
+  return r;
+}
+
+static MAG_CUDA_DEVICE MAG_AINLINE int64_t mag_remi(int64_t x, int64_t y) {
+  int64_t r = x % y;
+  if (r != 0 && (r < 0) != (y < 0)) r += y;
+  return r;
 }
 
 extern bool mag_utf8_validate(const uint8_t *str, size_t len);

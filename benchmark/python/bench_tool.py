@@ -1,9 +1,9 @@
 # (c) 2026 Mario Sieg. <mario.sieg.64@gmail.com>
 
 from abc import ABC
+from magnetron import *
 import matplotlib.pyplot as plt
 import numpy as np
-import magnetron as mag
 import timeit
 
 
@@ -114,7 +114,7 @@ class PerformanceInfo:
         ax2.legend()
         ax2.grid(True)
 
-        plt.suptitle(f'{mag.active_context().cpu_name}', y=1.05)
+        plt.suptitle('Magnetron', y=1.05)
         plt.tight_layout()
         plt.savefig(f'{self.name}_benchmark.png', dpi=300)
         plt.show()

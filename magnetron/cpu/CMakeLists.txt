@@ -9,6 +9,8 @@ if(${IS_AMD64})  # x86-64 specific compilation options
     include(amd64/amd64.cmake)
 elseif(${IS_ARM64}) # arm64 specific compilation options
     include(arm64/arm64.cmake)
+elseif(${IS_LOONGARCH64}) # loongson / godson specifiec compilation options
+    include(loongarch64/loongarch64.cmake)
 endif()
 
 set(MAGNETRON_CPU_SOURCES ${MAGNETRON_CPU_SOURCES} ${MAG_CPU_SOURCES_ENABLED}) # Add them to the list of sources to compile
